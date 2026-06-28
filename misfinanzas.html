@@ -573,7 +573,11 @@ function GM(){var mo=parseFloat(document.getElementById('fmmo').value)||0;var or
 // Afectar saldo según origen
 if(origen.startsWith('c_')){var cid=parseInt(origen.slice(2));var cu=E.cuentas.find(function(x){return x.id===cid;});if(cu)cu.saldo+=m.monto;m.cuenta=cid;}
 else if(origen.startsWith('t_')){var tid=parseInt(origen.slice(2));var ta=E.tarjetas.find(function(x){return x.id===tid;});if(ta&&tipoM==='gasto')ta.saldo+=Math.abs(mo);m.tarjeta=tid;}
-else if(origen.startsWith('p_')){var pid=parseInt(origen.slice(2));m.prestamo=pid;}
+else if(origen.startsWith('p_')){var pid=parseInt(origen.slice(2));m.prestamo=pid;
+  // Auto-marcar préstamo como pagado en el calendario del mes del movimiento
+  if(!E.calPagados)E.calPagados={};
+  var mf=parseD(m.fecha);E.calPagados[calKey('prestamo',pid,mf.getFullYear(),mf.getMonth())]=true;
+}
 E.movimientos.unshift(m);SAV();CM('mm');RM();RC();RT();}
 function RM(){
   var movs=E.movimientos.filter(function(m){if(filtM.tipo!=='todos'&&m.tipo!==filtM.tipo)return false;if(filtM.cuenta!=='todas'&&String(m.cuenta)!==filtM.cuenta)return false;if(busM&&m.descripcion.toLowerCase().indexOf(busM.toLowerCase())<0)return false;return true;}).sort(function(a,b){return parseD(b.fecha)-parseD(a.fecha);});
@@ -659,7 +663,12 @@ function ODCAL(dia){
     if(e.sub)h+='<div class="cal-day-sub">'+e.sub+'</div>';
     h+='</div>';
     if(esPagable){
-      h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+e.id+'\');ODCAL('+dia+')" style="background:'+(e.pagado?'var(--border)':'var(--accent)')+';border:none;border-radius:8px;padding:6px 12px;color:'+(e.pagado?'var(--muted)':'#fff')+';font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">'+(e.pagado?'Desmarcar':'\u2713 Pag.')+'</button>';
+      var tipoBase2=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
+      if(e.pagado){
+        h+='<button onclick="toggleCal(\''+tipoBase2+'\',\''+e.id+'\');ODCAL('+dia+')" style="background:var(--border);border:none;border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Desmarcar</button>';
+      } else {
+        h+='<button onclick="PAGARCAL(\''+tipoBase2+'\',\''+e.id+'\','+(e.monto||0)+',\''+e.label.replace(/'/g,"\\'")+'\')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">\u2192 Registrar pago</button>';
+      }
     }
     h+='</div>';
   });
@@ -667,6 +676,30 @@ function ODCAL(dia){
   AM('mcal');
 }
 
+function PAGARCAL(tipo,id,monto,desc){
+  CM('mcal');
+  ONM();
+  // Pre-llenar formulario
+  document.getElementById('fmd').value=desc;
+  document.getElementById('fmmo').value=monto||'';
+  document.getElementById('fmf').value=hoy();
+  // Seleccionar tipo ingreso (pago a tarjeta) o gasto (préstamo/fijo)
+  if(tipo==='tarjeta'){
+    STM('ingreso');
+    var cs=document.getElementById('fmcu');
+    for(var i=0;i<cs.options.length;i++){if(cs.options[i].value==='t_'+id){cs.selectedIndex=i;break;}}
+  } else if(tipo==='prestamo'){
+    STM('gasto');
+    var cs=document.getElementById('fmcu');
+    for(var i=0;i<cs.options.length;i++){if(cs.options[i].value==='p_'+id){cs.selectedIndex=i;break;}}
+  } else {
+    // fijo: gasto desde cuenta, sin origen pre-seleccionado
+    STM('gasto');
+  }
+  // Navegar a pestaña Movimientos
+  var btn=document.querySelector('.nav button:nth-child(4)');
+  if(btn)CT('m',btn);
+}
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
 
 // REPORTES
