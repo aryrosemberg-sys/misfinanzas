@@ -610,7 +610,7 @@ function buildEvCal(){
     ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
     ev.push({dia:t.pago,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
   });
-  E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY)ev.push({dia:d.getDate(),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:'var(--purple)',tipo:'prestamo',id:p.id,pagado:false});}});
+  E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY){var pagado=esPagadoCal('prestamo',p.id);ev.push({dia:d.getDate(),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado});}}});
   if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:f.dia,label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto});});}
   return ev;
 }
@@ -635,7 +635,7 @@ function RCAL(){
   var es=ev.slice().sort(function(a,b){return a.dia-b.dia;});
   if(!es.length)h+='<p style="color:var(--muted);text-align:center;padding:20px">Sin eventos este mes</p>';
   es.forEach(function(e){
-    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago';
+    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago'||e.tipo==='prestamo';
     var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
     h+='<div class="ei" style="border-left:4px solid '+(e.pagado?'var(--accent)':e.color)+';opacity:'+(e.pagado?'.7':'1')+';cursor:'+(esPagable?'pointer':'default')+'" '+(esPagable?'onclick="toggleCal(\''+tipoBase+'\',\''+e.id+'\')"':'')+' >';
     h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:17px;min-width:26px;text-align:center">'+e.dia+'</span>';
@@ -651,7 +651,7 @@ function ODCAL(dia){
   document.getElementById('mcal-titulo').textContent=dia+' de '+NM[calM]+' '+calY;
   var h='';
   ev.forEach(function(e){
-    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago';
+    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago'||e.tipo==='prestamo';
     var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
     h+='<div class="cal-day-item">';
     h+='<div class="cal-day-dot" style="background:'+(e.pagado?'var(--accent)':e.color)+'"></div>';
