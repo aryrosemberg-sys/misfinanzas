@@ -500,7 +500,7 @@ function RT(){
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Vence</p><p style="color:var(--text);font-weight:700;font-size:13px">'+t.vencimiento+'</p></div>';
     h+='</div>';
     h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted);font-size:11px">Uso del crédito</span><span style="color:'+(uso>80?'var(--red)':uso>60?'var(--amber)':'var(--accent)')+';font-size:11px;font-weight:700">'+uso.toFixed(0)+'%</span></div>'+bar(t.saldo,t.limite)+'</div>';
-    h+='<div class="fg" style="margin-top:10px">'+bdg('Corte día '+t.corte,'var(--accent)')+bdg('Pago día '+t.pago,'var(--amber)')+'</div>';
+    h+='<div class="fg" style="margin-top:10px">'+(t.corte?bdg('Corte día '+t.corte,'var(--accent)'):'')+bdg('Pago día '+t.pago+(t.pago2?' y '+t.pago2:''),'var(--amber)')+'</div>';
     h+='<div class="fg" style="margin-top:12px"><button class="btn bg bs" onclick="abrirDetalleTarjeta('+t.id+')">Ver detalle</button><button class="btn bg bs" onclick="ET('+t.id+')">Editar</button><button class="btn bd bs" onclick="ELT('+t.id+')">Eliminar</button></div></div>';
   });
   document.getElementById('tt').innerHTML=h;
@@ -533,7 +533,7 @@ function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjet
 function GT(){var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0};if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){t.id=edT;E.tarjetas[i]=t;}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();}
 
 function ELT(id){id=+id;if(!confirm('¿Eliminar?'))return;E.tarjetas=E.tarjetas.filter(function(x){return x.id!==id;});SAV();RT();}
-function VDT(id){id=+id;var t=E.tarjetas.find(function(x){return x.id===id;});if(!t)return;var h=DR('Banco',t.banco)+DR('Número',t.numero)+DR('Vencimiento',t.vencimiento)+DR('Día corte',t.corte)+DR('Día pago',t.pago)+DR('CAT',t.cat+'%')+DR('Límite',fmt(t.limite,t.moneda))+DR('Saldo',fmt(t.saldo,t.moneda))+DR('Pago mín.',fmt(t.minimo,t.moneda))+DR('Disponible',fmt(t.limite-t.saldo,t.moneda));
+function VDT(id){id=+id;var t=E.tarjetas.find(function(x){return x.id===id;});if(!t)return;var h=(t.corte?DR('Día corte',t.corte):'')+DR('Día pago',t.pago+(t.pago2?' y '+t.pago2:''))+DR('Banco',t.banco)+DR('Número',t.numero)+DR('Vencimiento',t.vencimiento)+DR('CAT',t.cat+'%')+DR('Límite',fmt(t.limite,t.moneda))+DR('Saldo',fmt(t.saldo,t.moneda))+DR('Pago mín.',fmt(t.minimo,t.moneda))+DR('Disponible',fmt(t.limite-t.saldo,t.moneda));
 var movs=E.movimientos.filter(function(m){return m.tarjeta===id||m.origen==='t_'+id;}).sort(function(a,b){return parseD(b.fecha)-parseD(a.fecha);});
 h+='<div style="margin-top:16px"><p style="color:var(--subtle);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Movimientos ('+movs.length+')</p>';
 if(!movs.length)h+='<p style="color:var(--muted);font-size:13px;text-align:center;padding:16px">Sin movimientos aún</p>';
@@ -609,8 +609,9 @@ function buildEvCal(){
       return d.getMonth()===calM&&d.getFullYear()===calY&&m.monto>0;
     });
     var pagado=ya||esPagadoCal('tarjeta',t.id);
-    ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
+    if(t.corte)ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
     ev.push({dia:t.pago,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
+    if(t.pago2)ev.push({dia:t.pago2,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
   });
   E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY){var pagado=esPagadoCal('prestamo',p.id);ev.push({dia:d.getDate(),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado});}}});
   if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:f.dia,label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto});});}
