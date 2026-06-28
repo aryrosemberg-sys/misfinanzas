@@ -1047,7 +1047,7 @@ function filtroFechas(filtro){
 function filtrarMovs(movs,filtro){
   var r=filtroFechas(filtro);
   if(!r)return movs;
-  return movs.filter(function(m){var d=new Date(m.fecha);return d>=r.ini&&d<=r.fin;});
+  return movs.filter(function(m){var d=parseD(m.fecha);return d>=r.ini&&d<=r.fin;});
 }
 
 function renderMovsDet(movsFilt, contenedorId, saldoInicial){
@@ -1055,7 +1055,7 @@ function renderMovsDet(movsFilt, contenedorId, saldoInicial){
   if(!movsFilt.length){h='<div class="det-empty"><p style="font-size:32px">📭</p><p style="margin-top:10px">Sin movimientos en este periodo</p></div>';document.getElementById(contenedorId).innerHTML=h;return;}
   var saldo=saldoInicial;
   // Calculate running balance from oldest to newest
-  var sorted=movsFilt.slice().sort(function(a,b){return new Date(a.fecha)-new Date(b.fecha);});
+  var sorted=movsFilt.slice().sort(function(a,b){return parseD(a.fecha)-parseD(b.fecha);});
   var saldos=[];
   sorted.forEach(function(m){saldo+=m.monto;saldos.push(saldo);});
   // Display newest first
@@ -1093,7 +1093,7 @@ function renderDetC(){
   // calc balance before period
   var r=filtroFechas(filtroDC);
   var saldoAntes=c.saldo;
-  if(r){var despues=movs.filter(function(m){return new Date(m.fecha)>r.fin;});saldoAntes=c.saldo-despues.reduce(function(s,m){return s+m.monto;},0);var enPer=mFilt.reduce(function(s,m){return s+m.monto;},0);saldoAntes-=enPer;}
+  if(r){var despues=movs.filter(function(m){return parseD(m.fecha)>r.fin;});saldoAntes=c.saldo-despues.reduce(function(s,m){return s+m.monto;},0);var enPer=mFilt.reduce(function(s,m){return s+m.monto;},0);saldoAntes-=enPer;}
   renderMovsDet(mFilt,'det-c-movs',saldoAntes);
 }
 
