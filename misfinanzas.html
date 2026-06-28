@@ -732,13 +732,13 @@ function PAGARCAL(tipo,id,monto,desc){
   if(tipo==='tarjeta'||tipo==='prestamo'){
     OPAG(tipo,id,monto,desc);
   } else {
-    // Gasto fijo: abre movimientos normal
+    // Gasto fijo: navegar primero, luego abrir modal
     CM('mcal');
+    var btn=document.querySelector('.nav button:nth-child(4)');
+    if(btn)CT('m',btn);
     ONM();
     document.getElementById('fmd').value=desc;
     document.getElementById('fmmo').value=monto||'';
-    var btn=document.querySelector('.nav button:nth-child(4)');
-    if(btn)CT('m',btn);
   }
 }
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
@@ -1470,7 +1470,6 @@ LOD(function(){RND('c');});
   <button class="btn bp bw" onclick="GPAG()">Registrar pago</button>
 </div></div>
 
-</body>
 <div id="mcal" class="modal-bg" onclick="if(event.target===this)CM('mcal')">
 <div class="modal" style="max-width:420px">
   <div class="mh"><h2 id="mcal-titulo">Día</h2><button class="mc" onclick="CM('mcal')">×</button></div>
