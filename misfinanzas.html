@@ -138,7 +138,15 @@ tr:nth-child(even){background:var(--surface)}
 .svg-chart{width:100%;overflow:hidden;border-radius:10px}
 .period-btn{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;color:var(--subtle);font-size:12px;font-weight:600;cursor:pointer}
 .period-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-
+/* CALENDARIO MODAL DÍA */
+.cal-day-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.cal-day-item:last-child{border:none}
+.cal-day-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cal-day-info{flex:1}
+.cal-day-label{font-size:14px;font-weight:600;color:var(--text)}
+.cal-day-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.cal-day-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:auto;flex-shrink:0}
+.cd{cursor:pointer;transition:opacity .15s}.cd:active{opacity:.6}
 </style>
 </head>
 <body>
@@ -585,24 +593,80 @@ function RM(){
 function ELM(id){id=+id;E.movimientos=E.movimientos.filter(function(x){return x.id!==id;});SAV();RM();}
 
 // CALENDARIO
+// calPagados: {'fijo_ID_YYYY-MM': true, 'tarjeta_ID_YYYY-MM': true}
+function calKey(tipo,id,y,m){return tipo+'_'+id+'_'+y+'-'+(m<9?'0':'')+(m+1);}
+function esPagadoCal(tipo,id){return !!(E.calPagados&&E.calPagados[calKey(tipo,id,calY,calM)]);}
+function toggleCal(tipo,id){if(!E.calPagados)E.calPagados={};var k=calKey(tipo,id,calY,calM);if(E.calPagados[k])delete E.calPagados[k];else E.calPagados[k]=true;SAV();RCAL();CM('mcal');}
+
+function buildEvCal(){
+  var ev=[];
+  E.tarjetas.forEach(function(t){
+    var ya=E.movimientos.some(function(m){
+      if(!m.tarjeta||m.tarjeta!==t.id)return false;
+      var d=parseD(m.fecha);
+      return d.getMonth()===calM&&d.getFullYear()===calY&&m.monto>0;
+    });
+    var pagado=ya||esPagadoCal('tarjeta',t.id);
+    ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
+    ev.push({dia:t.pago,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
+  });
+  E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY)ev.push({dia:d.getDate(),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:'var(--purple)',tipo:'prestamo',id:p.id,pagado:false});}});
+  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:f.dia,label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto});});}
+  return ev;
+}
+
 function RCAL(){
   var hd=new Date(),hdia=hd.getDate(),hmes=hd.getMonth(),hany=hd.getFullYear();
-  var ev=[];
-  E.tarjetas.forEach(function(t){ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)'});ev.push({dia:t.pago,label:'Pago: '+t.nombre+' — mín '+fmt(t.minimo,t.moneda),color:'var(--red)'});});
-  E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY)ev.push({dia:d.getDate(),label:'Pago: '+p.nombre+' — '+fmt(p.pagomensual,p.moneda),color:'var(--purple)'});}});
-  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var mostrar=false;if(frec==='Mensual')mostrar=true;else if(frec==='Bimestral'&&calM%2===0)mostrar=true;else if(frec==='Trimestral'&&calM%3===0)mostrar=true;else if(frec==='Semestral'&&(calM===0||calM===6))mostrar=true;else if(frec==='Anual'&&calM===0)mostrar=true;if(mostrar)ev.push({dia:f.dia,label:'💰 '+f.nombre+' — '+fmt(f.monto,'MXN'),color:'var(--accent)'});});}
+  var ev=buildEvCal();
   var dims=new Date(calY,calM+1,0).getDate(),pd=new Date(calY,calM,1).getDay();
-  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><button class="btn bg bs" onclick="CN(-1)">‹</button><h3 style="font-weight:700">'+NM[calM]+' '+calY+'</h3><button class="btn bg bs" onclick="CN(1)">›</button></div>';
+  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><button class="btn bg bs" onclick="CN(-1)">\u2039</button><h3 style="font-weight:700">'+NM[calM]+' '+calY+'</h3><button class="btn bg bs" onclick="CN(1)">\u203a</button></div>';
   h+='<div class="cg">';
-  ['Do','Lu','Ma','Mi','Ju','Vi','Sá'].forEach(function(d){h+='<div class="cdn">'+d+'</div>';});
+  ['Do','Lu','Ma','Mi','Ju','Vi','S\u00e1'].forEach(function(d){h+='<div class="cdn">'+d+'</div>';});
   for(var i=0;i<pd;i++)h+='<div></div>';
-  for(var dia=1;dia<=dims;dia++){var evD=ev.filter(function(e){return e.dia===dia;}),esH=dia===hdia&&calM===hmes&&calY===hany;h+='<div class="cd'+(esH?' today':evD.length?' hev':'')+'"><span style="font-size:11px;'+(esH?'color:var(--accent);font-weight:800':'color:var(--text)')+'">'+dia+'</span>';evD.slice(0,2).forEach(function(e){h+='<div class="cdot" style="background:'+e.color+'"></div>';});h+='</div>';}
+  for(var dia=1;dia<=dims;dia++){
+    var evD=ev.filter(function(e){return e.dia===dia;}),esH=dia===hdia&&calM===hmes&&calY===hany;
+    var onclick=evD.length?' onclick="ODCAL('+dia+')"':'';
+    h+='<div class="cd'+(esH?' today':evD.length?' hev':'')+'"'+onclick+'>';
+    h+='<span style="font-size:11px;'+(esH?'color:var(--accent);font-weight:800':'color:var(--text)')+'">'+dia+'</span>';
+    evD.slice(0,3).forEach(function(e){h+='<div class="cdot" style="background:'+(e.pagado?'var(--accent)':e.color)+'"></div>';});
+    h+='</div>';
+  }
   h+='</div><p class="st">Fechas importantes</p>';
   var es=ev.slice().sort(function(a,b){return a.dia-b.dia;});
   if(!es.length)h+='<p style="color:var(--muted);text-align:center;padding:20px">Sin eventos este mes</p>';
-  es.forEach(function(e){h+='<div class="ei" style="border-left:4px solid '+e.color+'"><span style="color:'+e.color+';font-weight:800;font-size:17px;min-width:26px;text-align:center">'+e.dia+'</span><span style="color:var(--text);font-size:13px">'+e.label+'</span></div>';});
+  es.forEach(function(e){
+    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago';
+    var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
+    h+='<div class="ei" style="border-left:4px solid '+(e.pagado?'var(--accent)':e.color)+';opacity:'+(e.pagado?'.7':'1')+';cursor:'+(esPagable?'pointer':'default')+'" '+(esPagable?'onclick="toggleCal(\''+tipoBase+'\',\''+e.id+'\')"':'')+' >';
+    h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:17px;min-width:26px;text-align:center">'+e.dia+'</span>';
+    h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:13px">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
+    h+='</div>';
+  });
   document.getElementById('tca').innerHTML=h;
 }
+
+function ODCAL(dia){
+  var ev=buildEvCal().filter(function(e){return e.dia===dia;});
+  if(!ev.length)return;
+  document.getElementById('mcal-titulo').textContent=dia+' de '+NM[calM]+' '+calY;
+  var h='';
+  ev.forEach(function(e){
+    var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago';
+    var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
+    h+='<div class="cal-day-item">';
+    h+='<div class="cal-day-dot" style="background:'+(e.pagado?'var(--accent)':e.color)+'"></div>';
+    h+='<div class="cal-day-info"><div class="cal-day-label">'+(e.pagado?'\u2705 ':'')+e.label+'</div>';
+    if(e.sub)h+='<div class="cal-day-sub">'+e.sub+'</div>';
+    h+='</div>';
+    if(esPagable){
+      h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+e.id+'\');ODCAL('+dia+')" style="background:'+(e.pagado?'var(--border)':'var(--accent)')+';border:none;border-radius:8px;padding:6px 12px;color:'+(e.pagado?'var(--muted)':'#fff')+';font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">'+(e.pagado?'Desmarcar':'\u2713 Pag.')+'</button>';
+    }
+    h+='</div>';
+  });
+  document.getElementById('mcal-body').innerHTML=h;
+  AM('mcal');
+}
+
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
 
 // REPORTES
@@ -1318,6 +1382,13 @@ LOD(function(){RND('c');});
   <div class="field"><label>Límite de gasto</label><input id="pvl" type="number" placeholder="0.00"/></div>
   <div class="field"><label>Frecuencia</label><select id="pvfrec"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
   <button class="btn bp bw" onclick="GAV()">Guardar</button>
+</div></div>
+
+<!-- MODAL DÍA CALENDARIO -->
+<div id="mcal" class="modal-bg" onclick="if(event.target===this)CM('mcal')">
+<div class="modal" style="max-width:420px">
+  <div class="mh"><h2 id="mcal-titulo">Día</h2><button class="mc" onclick="CM('mcal')">×</button></div>
+  <div id="mcal-body"></div>
 </div></div>
 
 </body>
