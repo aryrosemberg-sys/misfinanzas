@@ -161,6 +161,7 @@ tr:nth-child(even){background:var(--surface)}
     <div id="tca" class="tab"></div>
     <div id="tr" class="tab"></div>
     <div id="tct" class="tab"></div>
+    <div id="tpres" class="tab"></div>
   </div>
   <nav class="nav">
     <button class="active" onclick="CT('c',this)"><span class="ic">🏦</span>Cuentas<span class="dot"></span></button>
@@ -170,6 +171,7 @@ tr:nth-child(even){background:var(--surface)}
     <button onclick="CT('ca',this)"><span class="ic">📅</span>Calendario<span class="dot"></span></button>
     <button onclick="CT('r',this)"><span class="ic">📊</span>Reportes<span class="dot"></span></button>
     <button onclick="CT('ct',this)"><span class="ic">🏷️</span>Categorías<span class="dot"></span></button>
+    <button onclick="CT('pres',this)"><span class="ic">💰</span>Presupuesto<span class="dot"></span></button>
   </nav>
 </div>
 
@@ -308,7 +310,7 @@ tr:nth-child(even){background:var(--surface)}
 </div></div>
 
 <script>
-var E=estado={cuentas:[],tarjetas:[],prestamos:[],movimientos:[],categorias:{'Ingresos':['Salario','Freelance','Inversiones','Otros ingresos'],'Alimentación':['Supermercado','Restaurantes','Comida rápida','Mercado'],'Servicios':['Electricidad','Agua','Internet','Gas','Teléfono'],'Transporte':['Combustible','Uber/Didi','Transporte público','Mantenimiento auto'],'Entretenimiento':['Streaming','Cine','Salidas','Deportes'],'Salud':['Medicamentos','Médico','Gym','Dentista'],'Hogar':['Renta','Hipoteca','Muebles','Limpieza'],'Deudas':['Tarjeta crédito','Préstamo personal','Hipoteca'],'Educación':['Colegiatura','Libros','Cursos online'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Varios','Regalos','Donaciones']}};
+var E=estado={cuentas:[],tarjetas:[],prestamos:[],movimientos:[],presupuesto:{fijos:[],variables:[]},categorias:{'Ingresos':['Salario','Freelance','Inversiones','Otros ingresos'],'Alimentación':['Supermercado','Restaurantes','Comida rápida','Mercado'],'Servicios':['Electricidad','Agua','Internet','Gas','Teléfono'],'Transporte':['Combustible','Uber/Didi','Transporte público','Mantenimiento auto'],'Entretenimiento':['Streaming','Cine','Salidas','Deportes'],'Salud':['Medicamentos','Médico','Gym','Dentista'],'Hogar':['Renta','Hipoteca','Muebles','Limpieza'],'Deudas':['Tarjeta crédito','Préstamo personal','Hipoteca'],'Educación':['Colegiatura','Libros','Cursos online'],'Ropa':['Ropa','Zapatos','Accesorios'],'Otros':['Varios','Regalos','Donaciones']}};
 var _db=null,tabA='c',edC=null,edT=null,edP=null,tipoM='gasto',filtM={tipo:'todos',cuenta:'todas'},busM='',calM=new Date().getMonth(),calY=new Date().getFullYear(),catExp=null;
 var NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -359,7 +361,7 @@ function CT(tab,btn){document.querySelectorAll('.tab').forEach(function(t){t.cla
 function AM(id){document.getElementById(id).classList.add('open');}
 function CM(id){document.getElementById(id).classList.remove('open');}
 function ATP(){var t=E.cuentas.reduce(function(s,c){return s+(c.moneda==='MXN'?c.saldo:c.saldo*(c.moneda==='USD'?17.5:19));},0);document.getElementById('pt').textContent=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',notation:'compact'}).format(t);}
-function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab==='p')RP();else if(tab==='m')RM();else if(tab==='ca')RCAL();else if(tab==='r')RR();else if(tab==='ct')RCT();}catch(err){console.error('RND error:',err);}}
+function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab==='p')RP();else if(tab==='m')RM();else if(tab==='ca')RCAL();else if(tab==='r')RR();else if(tab==='ct')RCT();else if(tab==='pres')RPRES();}catch(err){console.error('RND error:',err);}}
 
 // CUENTAS
 var TI={bancaria:'🏦',inversion:'📈',no_bancaria:'💵'};
@@ -900,9 +902,130 @@ function GMEdit(){
   SAV();CM('mm');RM();RC();RT();
 }
 
+// PRESUPUESTO
+var presSec='fijos'; // 'fijos' o 'variables'
+var FRECS=['Semanal','Quincenal','Mensual','Bimestral','Trimestral','Semestral','Anual'];
+var FREC_FACTOR={Semanal:4.33,Quincenal:2,Mensual:1,Bimestral:0.5,Trimestral:0.333,Semestral:0.1667,Anual:0.0833};
+
+function RPRES(){
+  if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};
+  var mes=new Date().getMonth(),anio=new Date().getFullYear();
+  var movsDelMes=E.movimientos.filter(function(m){var d=new Date(m.fecha);return d.getMonth()===mes&&d.getFullYear()===anio&&m.tipo==='gasto';});
+
+  // Calcular total mensual equivalente fijos
+  var totalFijos=E.presupuesto.fijos.reduce(function(s,f){return s+(f.monto*(FREC_FACTOR[f.frecuencia]||1));},0);
+  var totalVarPres=E.presupuesto.variables.reduce(function(s,v){return s+(v.limite*(FREC_FACTOR[v.frecuencia]||1));},0);
+  var totalPres=totalFijos+totalVarPres;
+
+  // Gasto real del mes por subcategoría
+  var gastoPorSub={};
+  movsDelMes.forEach(function(m){
+    var k=(m.categoria||'')+'|'+(m.subcategoria||'');
+    gastoPorSub[k]=(gastoPorSub[k]||0)+Math.abs(m.monto);
+  });
+
+  var h='';
+  // Resumen arriba
+  h+='<div class="card" style="margin-bottom:14px;background:linear-gradient(135deg,var(--accent)22,var(--card))">';
+  h+='<p class="st" style="margin-bottom:8px">Resumen del mes</p>';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--muted);font-size:13px">Compromisos fijos</span><span style="font-weight:700;color:var(--text)">'+fmt(totalFijos,'MXN')+'</span></div>';
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--muted);font-size:13px">Presupuesto variable</span><span style="font-weight:700;color:var(--text)">'+fmt(totalVarPres,'MXN')+'</span></div>';
+  h+='<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;display:flex;justify-content:space-between"><span style="font-weight:700;font-size:14px">Total mensual</span><span style="font-weight:800;font-size:16px;color:var(--accent)">'+fmt(totalPres,'MXN')+'</span></div>';
+  h+='</div>';
+
+  // Tabs fijos/variables
+  h+='<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">';
+  h+='<button onclick="presSec=\'fijos\';RPRES()" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:2px solid '+(presSec==='fijos'?'var(--accent)':'transparent')+';color:'+(presSec==='fijos'?'var(--accent)':'var(--muted)')+';font-size:13px;font-weight:700;cursor:pointer;margin-bottom:-2px">📌 Gastos Fijos</button>';
+  h+='<button onclick="presSec=\'variables\';RPRES()" style="flex:1;padding:10px 4px;background:none;border:none;border-bottom:2px solid '+(presSec==='variables'?'var(--accent)':'transparent')+';color:'+(presSec==='variables'?'var(--accent)':'var(--muted)')+';font-size:13px;font-weight:700;cursor:pointer;margin-bottom:-2px">📊 Gastos Variables</button>';
+  h+='</div>';
+
+  if(presSec==='fijos'){
+    h+='<button class="btn bp bw" onclick="OAF()" style="margin-bottom:14px">+ Agregar gasto fijo</button>';
+    if(!E.presupuesto.fijos.length){
+      h+='<div class="empty"><div style="font-size:40px">📌</div><p>Sin gastos fijos aún</p></div>';
+    } else {
+      // Agrupar por categoría
+      var porCat={};
+      E.presupuesto.fijos.forEach(function(f){var c=f.categoria||'Sin categoría';if(!porCat[c])porCat[c]=[];porCat[c].push(f);});
+      Object.entries(porCat).forEach(function(en){
+        var cat=en[0],items=en[1];
+        h+='<p class="st">'+cat+'</p>';
+        items.forEach(function(f){
+          var hoy2=new Date(),dv=f.dia?new Date(hoy2.getFullYear(),hoy2.getMonth(),f.dia):null;
+          var dias=dv?Math.ceil((dv-hoy2)/(1000*60*60*24)):null;
+          var alerta=dias!==null&&dias<=3&&dias>=0;
+          var vencido=dias!==null&&dias<0;
+          h+='<div class="card" style="margin-bottom:8px;padding:13px 14px">';
+          h+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+          h+='<div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--text)">'+f.nombre+'</div>';
+          h+='<div style="color:var(--muted);font-size:11px;margin-top:2px">'+f.subcategoria+'  •  '+f.frecuencia;
+          if(f.dia)h+='  •  Día '+f.dia+(alerta?' ⚠️':vencido?' 🔴':'');
+          h+='</div></div>';
+          h+='<div style="text-align:right"><div style="font-weight:800;font-size:15px;color:var(--text)">'+fmt(f.monto,'MXN')+'</div>';
+          h+='<div style="color:var(--muted);font-size:10px">≈ '+fmt(f.monto*(FREC_FACTOR[f.frecuencia]||1),'MXN')+'/mes</div></div></div>';
+          h+='<div style="display:flex;gap:8px;margin-top:10px">';
+          h+='<button onclick="EDF('+f.id+')" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;cursor:pointer">✏️ Editar</button>';
+          h+='<button onclick="DDF('+f.id+')" style="background:var(--surface);border:1px solid var(--red)44;border-radius:8px;padding:7px 12px;color:var(--red);font-size:12px;cursor:pointer">✕</button>';
+          h+='</div></div>';
+        });
+      });
+    }
+  } else {
+    h+='<button class="btn bp bw" onclick="OAV()" style="margin-bottom:14px">+ Agregar gasto variable</button>';
+    if(!E.presupuesto.variables.length){
+      h+='<div class="empty"><div style="font-size:40px">📊</div><p>Sin presupuestos variables aún</p></div>';
+    } else {
+      var porCatV={};
+      E.presupuesto.variables.forEach(function(v){var c=v.categoria||'Sin categoría';if(!porCatV[c])porCatV[c]=[];porCatV[c].push(v);});
+      Object.entries(porCatV).forEach(function(en){
+        var cat=en[0],items=en[1];
+        h+='<p class="st">'+cat+'</p>';
+        items.forEach(function(v){
+          var gastado=gastoPorSub[v.categoria+'|'+v.subcategoria]||0;
+          var lim=v.limite*(FREC_FACTOR[v.frecuencia]||1);
+          var pct=lim>0?Math.min(gastado/lim*100,100):0;
+          var color=pct>=100?'var(--red)':pct>=80?'#f59e0b':'var(--accent)';
+          h+='<div class="card" style="margin-bottom:8px;padding:13px 14px">';
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+          h+='<div><div style="font-weight:700;font-size:14px;color:var(--text)">'+v.subcategoria+'</div>';
+          h+='<div style="color:var(--muted);font-size:11px">'+v.categoria+'  •  '+v.frecuencia+'</div></div>';
+          h+='<div style="text-align:right"><div style="font-size:13px;font-weight:700;color:'+color+'">'+fmt(gastado,'MXN')+'</div>';
+          h+='<div style="color:var(--muted);font-size:11px">de '+fmt(lim,'MXN')+'</div></div></div>';
+          h+='<div style="background:var(--surface);border-radius:6px;height:8px;overflow:hidden">';
+          h+='<div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:6px;transition:width .3s"></div></div>';
+          h+='<div style="display:flex;justify-content:space-between;margin-top:4px">';
+          h+='<span style="color:var(--muted);font-size:10px">'+Math.round(pct)+'% usado</span>';
+          h+='<span style="color:'+(lim-gastado>=0?'var(--accent)':'var(--red)')+';font-size:10px;font-weight:700">'+fmt(Math.abs(lim-gastado),'MXN')+' '+(lim-gastado>=0?'disponible':'excedido')+'</span></div>';
+          h+='<div style="display:flex;gap:8px;margin-top:10px">';
+          h+='<button onclick="EDV('+v.id+')" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;cursor:pointer">✏️ Editar</button>';
+          h+='<button onclick="DDV('+v.id+')" style="background:var(--surface);border:1px solid var(--red)44;border-radius:8px;padding:7px 12px;color:var(--red);font-size:12px;cursor:pointer">✕</button>';
+          h+='</div></div>';
+        });
+      });
+    }
+  }
+  document.getElementById('tpres').innerHTML=h;
+}
+
+// -- GASTOS FIJOS --
+var editPFId=null;
+function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pffrec').value='Mensual';var ca=document.getElementById('pfcat');ca.innerHTML='';Object.keys(E.categorias).forEach(function(k){ca.innerHTML+='<option>'+k+'</option>';});ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';AM('mpf');}
+function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';var ca=document.getElementById('pfcat');ca.innerHTML='';Object.keys(E.categorias).forEach(function(k){ca.innerHTML+='<option>'+k+'</option>';});ca.value=f.categoria||'';ASCPF();document.getElementById('pfsc').value=f.subcategoria||'';document.getElementById('pftt').textContent='Editar gasto fijo';AM('mpf');}
+function ASCPF(){var c=document.getElementById('pfcat').value,sc=document.getElementById('pfsc');sc.innerHTML='<option value="">Sin subcategoría</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});}
+function GAF(){var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,di=parseInt(document.getElementById('pfdi').value)||null,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value;if(!n||!m)return;if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};if(editPFId){var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});if(i>=0)E.presupuesto.fijos[i]={id:editPFId,nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc};}else{E.presupuesto.fijos.push({id:Date.now(),nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc});}SAV();CM('mpf');RPRES();}
+function DDF(id){if(!confirm('¿Eliminar este gasto fijo?'))return;E.presupuesto.fijos=E.presupuesto.fijos.filter(function(x){return x.id!==id;});SAV();RPRES();}
+
+// -- GASTOS VARIABLES --
+var editPVId=null;
+function OAV(){editPVId=null;document.getElementById('pvl').value='';document.getElementById('pvfrec').value='Mensual';var ca=document.getElementById('pvcat');ca.innerHTML='';Object.keys(E.categorias).forEach(function(k){ca.innerHTML+='<option>'+k+'</option>';});ASCPV();document.getElementById('pvtt').textContent='Nuevo presupuesto variable';AM('mpv');}
+function EDV(id){var v=E.presupuesto.variables.find(function(x){return x.id===id;});if(!v)return;editPVId=id;document.getElementById('pvl').value=v.limite||'';document.getElementById('pvfrec').value=v.frecuencia||'Mensual';var ca=document.getElementById('pvcat');ca.innerHTML='';Object.keys(E.categorias).forEach(function(k){ca.innerHTML+='<option>'+k+'</option>';});ca.value=v.categoria||'';ASCPV();document.getElementById('pvsc').value=v.subcategoria||'';document.getElementById('pvtt').textContent='Editar presupuesto variable';AM('mpv');}
+function ASCPV(){var c=document.getElementById('pvcat').value,sc=document.getElementById('pvsc');sc.innerHTML='<option value="">Todas</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});}
+function GAV(){var l=parseFloat(document.getElementById('pvl').value)||0,fr=document.getElementById('pvfrec').value,ca=document.getElementById('pvcat').value,sc=document.getElementById('pvsc').value;if(!l||!ca)return;if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};if(editPVId){var i=E.presupuesto.variables.findIndex(function(x){return x.id===editPVId;});if(i>=0)E.presupuesto.variables[i]={id:editPVId,limite:l,frecuencia:fr,categoria:ca,subcategoria:sc};}else{E.presupuesto.variables.push({id:Date.now(),limite:l,frecuencia:fr,categoria:ca,subcategoria:sc});}SAV();CM('mpv');RPRES();}
+function DDV(id){if(!confirm('¿Eliminar este presupuesto?'))return;E.presupuesto.variables=E.presupuesto.variables.filter(function(x){return x.id!==id;});SAV();RPRES();}
+
 // BACKUP
 function EXP(){var j=JSON.stringify(E,null,2),b=new Blob([j],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='misfinanzas_'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(u);document.getElementById('bkmsg').innerHTML='<div class="mok">✅ Respaldo descargado</div>';}
-function IMP(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){try{var p=JSON.parse(ev.target.result);if(!p.cuentas||!p.movimientos)throw 0;E=estado=p;SAV();RND(tabA);document.getElementById('bkmsg').innerHTML='<div class="mok">✅ Datos restaurados</div>';}catch(_){document.getElementById('bkmsg').innerHTML='<div class="merr">❌ Archivo no válido</div>';}};r.readAsText(f);e.target.value='';}
+function IMP(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){try{var p=JSON.parse(ev.target.result);if(!p.cuentas||!p.movimientos)throw 0;if(!p.presupuesto)p.presupuesto={fijos:[],variables:[]};E=estado=p;SAV();RND(tabA);document.getElementById('bkmsg').innerHTML='<div class="mok">✅ Datos restaurados</div>';}catch(_){document.getElementById('bkmsg').innerHTML='<div class="merr">❌ Archivo no válido</div>';}};r.readAsText(f);e.target.value='';}
 
 
 // PANTALLAS DETALLE
@@ -1168,6 +1291,30 @@ LOD(function(){RND('c');});
   <div class="field" id="ef-scw"><label>Subcategoría</label><select id="ef-sc"></select></div>
   <button class="btn bp bw" onclick="GEdit()">Guardar cambios</button>
   <button class="btn bd bw" style="margin-top:8px" onclick="DelMov()">Eliminar movimiento</button>
+</div></div>
+
+<!-- MODAL GASTO FIJO -->
+<div id="mpf" class="modal-bg" onclick="if(event.target===this)CM('mpf')">
+<div class="modal">
+  <div class="mh"><h2 id="pftt">Nuevo gasto fijo</h2><button class="mc" onclick="CM('mpf')">×</button></div>
+  <div class="field"><label>Nombre</label><input id="pfn" placeholder="Ej: Colegio Tarbut"/></div>
+  <div class="field"><label>Monto</label><input id="pfm" type="number" placeholder="0.00"/></div>
+  <div class="field"><label>Frecuencia</label><select id="pffrec"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
+  <div class="field"><label>Día de pago (del mes)</label><input id="pfdi" type="number" min="1" max="31" placeholder="Ej: 15"/></div>
+  <div class="field"><label>Categoría</label><select id="pfcat" onchange="ASCPF()"></select></div>
+  <div class="field"><label>Subcategoría</label><select id="pfsc"></select></div>
+  <button class="btn bp bw" onclick="GAF()">Guardar</button>
+</div></div>
+
+<!-- MODAL GASTO VARIABLE -->
+<div id="mpv" class="modal-bg" onclick="if(event.target===this)CM('mpv')">
+<div class="modal">
+  <div class="mh"><h2 id="pvtt">Nuevo presupuesto variable</h2><button class="mc" onclick="CM('mpv')">×</button></div>
+  <div class="field"><label>Categoría</label><select id="pvcat" onchange="ASCPV()"></select></div>
+  <div class="field"><label>Subcategoría</label><select id="pvsc"></select></div>
+  <div class="field"><label>Límite de gasto</label><input id="pvl" type="number" placeholder="0.00"/></div>
+  <div class="field"><label>Frecuencia</label><select id="pvfrec"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
+  <button class="btn bp bw" onclick="GAV()">Guardar</button>
 </div></div>
 
 </body>
