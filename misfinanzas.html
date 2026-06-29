@@ -482,11 +482,12 @@ function getMonedaTR(val){
   return 'MXN';
 }
 function ajustarTR(val,delta){
-  // Para origen (delta negativo): cuenta baja, tarjeta/prestamo sube (más deuda)
-  // Para destino (delta positivo): cuenta sube, tarjeta/prestamo baja (menos deuda)
+  // delta negativo = origen pierde, delta positivo = destino gana
+  // Para cuenta: saldo sube/baja directamente
+  // Para tarjeta/prestamo: delta positivo = pago = saldo baja; delta negativo = disposición = saldo sube
   if(val.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(val.slice(2));});if(c)c.saldo+=delta;}
-  else if(val.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(val.slice(2));});if(t)t.saldo=Math.max(0,t.saldo-delta);}
-  else if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});if(p)p.saldo=Math.max(0,(p.saldo||0)-delta);}
+  else if(val.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(val.slice(2));});if(t)t.saldo=t.saldo-delta;}
+  else if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});if(p)p.saldo=(p.saldo||0)-delta;}
 }
 function HT(){
   var dval=document.getElementById('trd').value,aval=document.getElementById('tra').value,mo=parseFloat(document.getElementById('trm').value)||0;
