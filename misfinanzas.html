@@ -505,7 +505,7 @@ function HT(){
   if(aval.startsWith('t_'))E.calPagados[calKey('tarjeta',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
   if(aval.startsWith('p_'))E.calPagados[calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
   var nomOri=getNombreTR(dval),nomDest=getNombreTR(aval);
-  E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,tipo:'transferencia'});
+  E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval});
   SAV();CM('mtr');RC();RT();RP();
 }
 
@@ -648,7 +648,34 @@ function RM(){
   movs.forEach(function(m){var esTR=m.tipo==='transferencia';h+='<div class="mi"><div class="ml"><p>'+m.descripcion+'</p><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px"><span style="color:var(--muted);font-size:11px">'+fmtD(m.fecha)+'</span>'+(esTR?bdg('↔ Transferencia','var(--blue)'):bdg(m.categoria,'var(--purple)'))+(m.subcategoria?bdg(m.subcategoria,'var(--blue)'):'')+'</div></div><div class="mr"><span style="font-weight:800;font-size:15px;color:'+(esTR?'var(--blue)':m.monto>0?'var(--accent)':'var(--red)')+'">'+( m.monto>0?'+':'')+fmt(m.monto)+'</span><button onclick="ELM('+m.id+')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer">✕</button></div></div>';});
   document.getElementById('tm').innerHTML=h;
 }
-function ELM(id){id=+id;E.movimientos=E.movimientos.filter(function(x){return x.id!==id;});SAV();RM();}
+function ELM(id){
+  id=+id;
+  var m=E.movimientos.find(function(x){return x.id===id;});
+  if(!m)return;
+  // Revertir saldo según tipo de movimiento
+  if(m.tipo==='transferencia'){
+    // Revertir origen (cuenta que pagó)
+    if(m.trOrigen){
+      var v=m.trOrigen;
+      if(v.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(v.slice(2));});if(c)c.saldo+=Math.abs(m.monto);}
+      else if(v.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(v.slice(2));});if(t)t.saldo+=Math.abs(m.monto);}
+      else if(v.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(v.slice(2));});if(p)p.saldo+=Math.abs(m.monto);}
+    }
+    // Revertir destino
+    if(m.trDestino){
+      var v=m.trDestino;
+      if(v.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(v.slice(2));});if(c)c.saldo-=Math.abs(m.montoDest||m.monto);}
+      else if(v.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(v.slice(2));});if(t)t.saldo+=Math.abs(m.montoDest||m.monto);}
+      else if(v.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(v.slice(2));});if(p)p.saldo+=Math.abs(m.montoDest||m.monto);}
+    }
+  } else {
+    // Movimiento normal: revertir sobre la cuenta origen
+    if(m.cuenta){var c=E.cuentas.find(function(x){return x.id===m.cuenta;});if(c)c.saldo-=m.monto;}
+    if(m.tarjeta&&m.tipo==='gasto'){var t=E.tarjetas.find(function(x){return x.id===m.tarjeta;});if(t)t.saldo-=Math.abs(m.monto);}
+  }
+  E.movimientos=E.movimientos.filter(function(x){return x.id!==id;});
+  SAV();RM();RC();RT();ATP();
+}
 
 // CALENDARIO
 // calPagados: {'fijo_ID_YYYY-MM': true, 'tarjeta_ID_YYYY-MM': true}
@@ -780,8 +807,9 @@ function GPAG(){
     var df=parseD(fecha);E.calPagados[calKey('prestamo',_pagId,df.getFullYear(),df.getMonth())]=true;
   }
   // Registrar como movimiento tipo 'transferencia' (no afecta reportes de gastos)
-  var m={id:uid(),fecha:fecha,descripcion:desc,monto:-mo,tipo:'transferencia',origen:cu,tarjeta:_pagTipo==='tarjeta'?+_pagId:undefined,prestamo:_pagTipo==='prestamo'?+_pagId:undefined,cuentaOrigen:cu?parseInt(cu.slice(2)):undefined};
-  if(cu.startsWith('c_'))m.cuenta=parseInt(cu.slice(2));
+  var trDest=_pagTipo==='tarjeta'?'t_'+_pagId:'p_'+_pagId;
+  var m={id:uid(),fecha:fecha,descripcion:desc,monto:-mo,montoDest:mo,tipo:'transferencia',trOrigen:cu||'',trDestino:trDest};
+  if(cu&&cu.startsWith('c_'))m.cuenta=parseInt(cu.slice(2));
   E.movimientos.unshift(m);
   SAV();CM('mpag');RM();RC();RT();ATP();
 }
