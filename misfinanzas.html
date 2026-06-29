@@ -31,6 +31,23 @@ input,select,button{font-family:inherit;font-size:14px}
 .nav button .dot{width:3px;height:3px;border-radius:50%;background:var(--accent);display:none}
 .nav button.active .dot{display:block}
 .content{padding:16px 14px 110px}
+
+/* DESKTOP LAYOUT */
+@media(min-width:768px){
+  body{display:flex;min-height:100vh}
+  .app{max-width:100%;width:100%;margin:0;display:flex;flex-direction:column}
+  .header{position:fixed;top:0;left:240px;right:0;z-index:100;border-left:1px solid var(--border)}
+  .nav{position:fixed;left:0;top:0;bottom:0;width:240px;flex-direction:column;border-top:none;border-right:1px solid var(--border);transform:none;max-width:240px;padding:24px 0 16px;justify-content:flex-start;gap:4px}
+  .nav-logo{display:flex;align-items:center;gap:10px;padding:0 20px 20px;border-bottom:1px solid var(--border);margin-bottom:12px}
+  .nav-logo-title{font-size:16px;font-weight:900;letter-spacing:-.02em}
+  .nav-logo-title span{color:var(--accent)}
+  .nav button{flex:none;flex-direction:row;padding:10px 20px;font-size:13px;font-weight:600;gap:10px;justify-content:flex-start;border-radius:0 10px 10px 0;margin-right:12px;text-align:left;width:calc(100% - 12px)}
+  .nav button .ic{font-size:18px;width:22px;text-align:center}
+  .nav button .dot{display:none!important}
+  .nav button.active{background:#10B98120;color:var(--accent)}
+  .content{margin-left:240px;margin-top:62px;padding:24px 32px 40px;max-width:960px}
+  .det-screen{left:240px}
+}
 .tab{display:none}.tab.active{display:block}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
 .field{margin-bottom:13px}
@@ -172,6 +189,10 @@ tr:nth-child(even){background:var(--surface)}
     <div id="tpres" class="tab"></div>
   </div>
   <nav class="nav">
+    <div class="nav-logo" style="display:none" id="nav-logo-desk">
+      <span style="font-size:22px">💰</span>
+      <div class="nav-logo-title">Mis<span>Finanzas</span></div>
+    </div>
     <button class="active" onclick="CT('c',this)"><span class="ic">🏦</span>Cuentas<span class="dot"></span></button>
     <button onclick="CT('t',this)"><span class="ic">💳</span>Tarjetas<span class="dot"></span></button>
     <button onclick="CT('p',this)"><span class="ic">📝</span>Préstamos<span class="dot"></span></button>
@@ -400,16 +421,33 @@ if(!movs.length)h+='<p style="color:var(--muted);font-size:13px;text-align:cente
 movs.forEach(function(m){h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)"><div><p style="font-size:13px;font-weight:600;color:var(--text)">'+m.descripcion+'</p><p style="font-size:11px;color:var(--muted)">'+fmtD(m.fecha)+(m.categoria?' · '+m.categoria:'')+'</p></div><div style="text-align:right"><p style="font-weight:800;font-size:14px;color:'+(m.monto>0?'var(--accent)':'var(--red)')+'">'+( m.monto>0?'+':'')+fmt(m.monto)+'</p><button onclick="EMov('+m.id+')" style="background:none;border:none;color:var(--blue);font-size:11px;cursor:pointer">Editar</button></div></div>';});
 h+='</div>';
 document.getElementById('mcdb').innerHTML=h;AM('mcd');}
-function OT(){var o='<option value="">Seleccionar…</option>';E.cuentas.forEach(function(c){o+='<option value="'+c.id+'">'+c.nombre+' — '+fmt(c.saldo,c.moneda)+'</option>';});document.getElementById('trd').innerHTML=o;var o2='<option value="">Seleccionar…</option>';E.cuentas.forEach(function(c){o2+='<option value="'+c.id+'">'+c.nombre+'</option>';});document.getElementById('tra').innerHTML=o2;document.getElementById('trm').value='';document.getElementById('trtc').value='';document.getElementById('tc-wrap').style.display='none';document.getElementById('tc-resultado').style.display='none';document.getElementById('trd').onchange=checkTC;document.getElementById('tra').onchange=checkTC;AM('mtr');}
+function opsTR(conSaldo){
+  var o='<option value="">Seleccionar…</option>';
+  o+='<optgroup label="Cuentas">';
+  E.cuentas.forEach(function(c){o+='<option value="c_'+c.id+'">'+c.nombre+(conSaldo?' — '+fmt(c.saldo,c.moneda):'')+'</option>';});
+  o+='</optgroup>';
+  if(E.tarjetas.length){o+='<optgroup label="Tarjetas de crédito">';E.tarjetas.forEach(function(t){o+='<option value="t_'+t.id+'">'+t.nombre+(conSaldo?' — saldo '+fmt(t.saldo,t.moneda):'')+'</option>';});o+='</optgroup>';}
+  if(E.prestamos.length){o+='<optgroup label="Préstamos">';E.prestamos.forEach(function(p){o+='<option value="p_'+p.id+'">'+p.nombre+(conSaldo?' — saldo '+fmt(p.saldo,p.moneda):'')+'</option>';});o+='</optgroup>';}
+  return o;
+}
+function OT(){
+  document.getElementById('trd').innerHTML=opsTR(true);
+  document.getElementById('tra').innerHTML=opsTR(false);
+  document.getElementById('trm').value='';
+  document.getElementById('trtc').value='';
+  document.getElementById('tc-wrap').style.display='none';
+  document.getElementById('tc-resultado').style.display='none';
+  document.getElementById('trd').onchange=checkTC;
+  document.getElementById('tra').onchange=checkTC;
+  AM('mtr');
+}
 
 function checkTC(){
-  var di=parseInt(document.getElementById('trd').value);
-  var ai=parseInt(document.getElementById('tra').value);
-  var cD=E.cuentas.find(function(x){return x.id===di;});
-  var cA=E.cuentas.find(function(x){return x.id===ai;});
-  if(cD&&cA&&cD.moneda!==cA.moneda){
+  var monedaOri=getMonedaTR(document.getElementById('trd').value||'');
+  var monedaDest=getMonedaTR(document.getElementById('tra').value||'');
+  if(monedaOri&&monedaDest&&monedaOri!==monedaDest){
     document.getElementById('tc-wrap').style.display='block';
-    document.getElementById('tc-label').textContent='Tipo de cambio (1 '+cD.moneda+' = ? '+cA.moneda+')';
+    document.getElementById('tc-label').textContent='Tipo de cambio (1 '+monedaOri+' = ? '+monedaDest+')';
   } else {
     document.getElementById('tc-wrap').style.display='none';
     document.getElementById('tc-resultado').style.display='none';
@@ -418,39 +456,57 @@ function checkTC(){
 }
 
 function calcTC(){
-  var di=parseInt(document.getElementById('trd').value);
-  var ai=parseInt(document.getElementById('tra').value);
-  var cD=E.cuentas.find(function(x){return x.id===di;});
-  var cA=E.cuentas.find(function(x){return x.id===ai;});
-  if(!cD||!cA||cD.moneda===cA.moneda)return;
+  var monedaOri=getMonedaTR(document.getElementById('trd').value||'');
+  var monedaDest=getMonedaTR(document.getElementById('tra').value||'');
+  if(!monedaOri||!monedaDest||monedaOri===monedaDest)return;
   var monto=parseFloat(document.getElementById('trm').value)||0;
   var tc=parseFloat(document.getElementById('trtc').value)||0;
   var res=document.getElementById('tc-resultado');
   if(monto>0&&tc>0){
-    var dest=monto*tc;
-    document.getElementById('tc-monto-dest').textContent=fmt(dest,cA.moneda);
+    document.getElementById('tc-monto-dest').textContent=fmt(monto*tc,monedaDest);
     res.style.display='block';
   } else {
     res.style.display='none';
   }
 }
+function getNombreTR(val){
+  if(val.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(val.slice(2));});return c?c.nombre:'';}
+  if(val.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(val.slice(2));});return t?t.nombre:'';}
+  if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});return p?p.nombre:'';}
+  return '';
+}
+function getMonedaTR(val){
+  if(val.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(val.slice(2));});return c?c.moneda:'MXN';}
+  if(val.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(val.slice(2));});return t?t.moneda:'MXN';}
+  if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});return p?p.moneda:'MXN';}
+  return 'MXN';
+}
+function ajustarTR(val,delta){
+  // Para origen (delta negativo): cuenta baja, tarjeta/prestamo sube (más deuda)
+  // Para destino (delta positivo): cuenta sube, tarjeta/prestamo baja (menos deuda)
+  if(val.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(val.slice(2));});if(c)c.saldo+=delta;}
+  else if(val.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(val.slice(2));});if(t)t.saldo=Math.max(0,t.saldo-delta);}
+  else if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});if(p)p.saldo=Math.max(0,(p.saldo||0)-delta);}
+}
 function HT(){
-  var di=parseInt(document.getElementById('trd').value),ai=parseInt(document.getElementById('tra').value),mo=parseFloat(document.getElementById('trm').value)||0;
-  if(!di||!ai||!mo||di===ai)return;
-  var cd=E.cuentas.find(function(c){return c.id===di;}),ca=E.cuentas.find(function(c){return c.id===ai;});
-  if(!cd||!ca)return;
-  var moOrigen=mo, moDest=mo;
-  if(cd.moneda!==ca.moneda){
+  var dval=document.getElementById('trd').value,aval=document.getElementById('tra').value,mo=parseFloat(document.getElementById('trm').value)||0;
+  if(!dval||!aval||!mo||dval===aval)return;
+  var monedaOri=getMonedaTR(dval),monedaDest=getMonedaTR(aval),moDest=mo;
+  if(monedaOri!==monedaDest){
     var tc=parseFloat(document.getElementById('trtc').value)||0;
     if(!tc){alert('Ingresa el tipo de cambio');return;}
     moDest=mo*tc;
   }
-  cd.saldo-=moOrigen;
-  ca.saldo+=moDest;
-  var desc=cd.moneda!==ca.moneda?' (TC: '+document.getElementById('trtc').value+')':'';
-  E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Transferencia a '+ca.nombre+desc,monto:-moOrigen,tipo:'gasto',categoria:'Transferencia',subcategoria:'Entre cuentas',cuenta:di,origen:'c_'+di});
-  E.movimientos.unshift({id:uid()+1,fecha:hoy(),descripcion:'Transferencia desde '+cd.nombre+desc,monto:moDest,tipo:'ingreso',categoria:'Transferencia',subcategoria:'Entre cuentas',cuenta:ai,origen:'c_'+ai});
-  SAV();CM('mtr');RC();
+  ajustarTR(dval,-mo);   // origen pierde
+  ajustarTR(aval,moDest); // destino gana
+  // Marcar pagado en calendario si destino es tarjeta o préstamo
+  if(!E.calPagados)E.calPagados={};
+  var hd=new Date();
+  if(aval.startsWith('t_'))E.calPagados[calKey('tarjeta',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
+  if(aval.startsWith('p_'))E.calPagados[calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
+  var nomOri=getNombreTR(dval),nomDest=getNombreTR(aval);
+  E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,tipo:'transferencia'});
+  SAV();CM('mtr');RC();RT();RP();
 }
 
 // TARJETAS
@@ -1336,7 +1392,7 @@ function DelMov(){
 
 // INICIO
 document.getElementById('fh').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
-LOD(function(){RND('c');});
+LOD(function(){RND('c');if(window.innerWidth>=768){var l=document.getElementById('nav-logo-desk');if(l)l.style.display='flex';}});
 </script>
 
 <!-- PANTALLA DETALLE CUENTA -->
