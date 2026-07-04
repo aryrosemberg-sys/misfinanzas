@@ -347,17 +347,39 @@ var NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septi
 var SB_URL='https://xlrokhkebhmxqmeqlzfa.supabase.co';
 var SB_KEY='sb_publishable_4B8ppshvNFRQGOGjvBoJWw_CKBBE-ZC';
 
-async function SAV(){
+var _savQueue=Promise.resolve();
+var _savPendingCount=0;
+function _updSavIndicator(){
+  var b=document.getElementById('savIndicator');
+  if(!b)return;
+  b.style.display=_savPendingCount>0?'inline-block':'none';
+}
+async function _doSave(){
+  var snapshot=JSON.parse(JSON.stringify(E));
   try{
     var resp=await fetch(SB_URL+'/rest/v1/datos',{
       method:'POST',
       headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:'state',contenido:E,updated_at:new Date().toISOString()})
+      body:JSON.stringify({id:'state',contenido:snapshot,updated_at:new Date().toISOString()})
     });
-    if(!resp.ok)throw new Error('save failed');
+    if(!resp.ok)throw new Error('save failed: '+resp.status);
   }catch(err){
-    try{localStorage.setItem('mf_backup',JSON.stringify(E));}catch(_){}
+    console.error('Error guardando en Supabase:',err);
+    try{localStorage.setItem('mf_backup',JSON.stringify(snapshot));}catch(_){}
+    var b=document.getElementById('bkmsg');
+    if(b)b.innerHTML='<div class="merr">⚠️ No se pudo guardar en la nube (se guardó copia local). Revisa tu conexión.</div>';
   }
+}
+// Encola los guardados para que SIEMPRE se ejecuten en orden y nunca en paralelo.
+// Esto evita que un guardado viejo (más lento) sobrescriba uno más nuevo en Supabase.
+function SAV(){
+  _savPendingCount++;
+  _updSavIndicator();
+  _savQueue=_savQueue.then(function(){return _doSave();}).catch(function(e){console.error(e);}).then(function(){
+    _savPendingCount--;
+    _updSavIndicator();
+  });
+  return _savQueue;
 }
 
 async function LOD(cb){
@@ -412,7 +434,11 @@ function RC(){
 function ONC(){edC=null;document.getElementById('mct').textContent='Nueva cuenta';['fcn','fcb','fcs','fcnu','fctit','fccl','fcdep'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('fct').value='bancaria';document.getElementById('fcm').value='MXN';document.querySelector('#mc .btn').textContent='Agregar cuenta';TBC();AM('mc');}
 function EC(id){id=+id;var c=E.cuentas.find(function(x){return x.id===id;});if(!c)return;edC=id;document.getElementById('mct').textContent='Editar cuenta';document.getElementById('fct').value=c.tipo;document.getElementById('fcn').value=c.nombre||'';document.getElementById('fcb').value=c.banco||'';document.getElementById('fcm').value=c.moneda||'MXN';document.getElementById('fcs').value=c.saldo||'';document.getElementById('fcnu').value=c.numero||'';document.getElementById('fctit').value=c.titular||'';document.getElementById('fccl').value=c.clabe||'';document.getElementById('fcdep').value=(c.depositantes||[]).join(', ');document.querySelector('#mc .btn').textContent='Guardar cambios';TBC();AM('mc');}
 function TBC(){var t=document.getElementById('fct').value,s=t!=='no_bancaria';document.getElementById('fcbw').style.display=s?'':'none';document.getElementById('fce').style.display=s?'':'none';}
-function GC(){var c={tipo:document.getElementById('fct').value,nombre:document.getElementById('fcn').value,banco:document.getElementById('fcb').value,moneda:document.getElementById('fcm').value,saldo:parseFloat(document.getElementById('fcs').value)||0,numero:document.getElementById('fcnu').value,titular:document.getElementById('fctit').value,clabe:document.getElementById('fccl').value,depositantes:document.getElementById('fcdep').value.split(',').map(function(s){return s.trim();}).filter(Boolean)};if(!c.nombre)return;if(edC){var i=E.cuentas.findIndex(function(x){return x.id===edC;});if(i>=0){var saldoAnt=E.cuentas[i].saldo;var delta=c.saldo-saldoAnt;c.id=edC;E.cuentas[i]=c;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+c.nombre,monto:delta,tipo:'ajuste',origen:'c_'+edC,cuenta:edC});}}}else{c.id=uid();E.cuentas.push(c);}SAV();CM('mc');RC();ATP();RM();}
+function GC(){
+try{
+var c={tipo:document.getElementById('fct').value,nombre:document.getElementById('fcn').value,banco:document.getElementById('fcb').value,moneda:document.getElementById('fcm').value,saldo:parseFloat(document.getElementById('fcs').value)||0,numero:document.getElementById('fcnu').value,titular:document.getElementById('fctit').value,clabe:document.getElementById('fccl').value,depositantes:document.getElementById('fcdep').value.split(',').map(function(s){return s.trim();}).filter(Boolean)};if(!c.nombre)return;if(edC){var i=E.cuentas.findIndex(function(x){return x.id===edC;});if(i>=0){var saldoAnt=E.cuentas[i].saldo;var delta=c.saldo-saldoAnt;c.id=edC;E.cuentas[i]=c;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+c.nombre,monto:delta,tipo:'ajuste',origen:'c_'+edC,cuenta:edC});}}}else{c.id=uid();E.cuentas.push(c);}SAV();CM('mc');RC();ATP();RM();
+}catch(err){console.error('Error en GC (guardar cuenta):',err);alert('Ocurrió un error al guardar la cuenta. Revisa la consola (F12) y avisa a soporte.');}
+}
 function ELC(id){id=+id;if(!confirm('¿Eliminar?'))return;E.cuentas=E.cuentas.filter(function(x){return x.id!==id;});SAV();RC();ATP();}
 function VDC(id){id=+id;var c=E.cuentas.find(function(x){return x.id===id;});if(!c)return;var h='';if(c.tipo)h+=DR('Tipo',TL[c.tipo]||c.tipo);if(c.banco)h+=DR('Banco',c.banco);if(c.titular)h+=DR('Titular',c.titular);if(c.numero)h+=DR('Número',c.numero);if(c.clabe)h+=DR('CLABE',c.clabe);h+=DR('Moneda',c.moneda)+DR('Saldo',fmt(c.saldo,c.moneda));if(c.depositantes&&c.depositantes.length){h+='<p style="color:var(--muted);font-size:13px;margin:8px 0 6px">Depositantes</p><div class="fg">';c.depositantes.forEach(function(d){h+=bdg(d,'var(--purple)');});h+='</div>';}
 var movs=E.movimientos.filter(function(m){return m.cuenta===id||m.origen==='c_'+id||m.trOrigen==='c_'+id||m.trDestino==='c_'+id;}).sort(function(a,b){return parseD(b.fecha)-parseD(a.fecha);});
@@ -490,6 +516,7 @@ function ajustarTR(val,delta){
   else if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});if(p)p.saldo=(p.saldo||0)-delta;}
 }
 function HT(){
+try{
   var dval=document.getElementById('trd').value,aval=document.getElementById('tra').value,mo=parseFloat(document.getElementById('trm').value)||0;
   if(!dval||!aval||!mo||dval===aval)return;
   var monedaOri=getMonedaTR(dval),monedaDest=getMonedaTR(aval),moDest=mo;
@@ -498,6 +525,10 @@ function HT(){
     if(!tc){alert('Ingresa el tipo de cambio');return;}
     moDest=mo*tc;
   }
+  var nomOri=getNombreTR(dval),nomDest=getNombreTR(aval);
+  // Crear el movimiento ANTES de tocar saldos, para que si algo más falla
+  // después, el movimiento ya haya quedado registrado.
+  var movObj={id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval};
   ajustarTR(dval,-mo);   // origen pierde
   ajustarTR(aval,moDest); // destino gana
   // Marcar pagado en calendario si destino es tarjeta o préstamo
@@ -505,9 +536,9 @@ function HT(){
   var hd=new Date();
   if(aval.startsWith('t_'))E.calPagados[calKey('tarjeta',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
   if(aval.startsWith('p_'))E.calPagados[calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
-  var nomOri=getNombreTR(dval),nomDest=getNombreTR(aval);
-  E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval});
-  SAV();CM('mtr');RC();RT();RP();
+  E.movimientos.unshift(movObj);
+  SAV();CM('mtr');RC();RT();RP();RM();
+}catch(err){console.error('Error en HT (transferencia):',err);alert('Ocurrió un error al hacer la transferencia. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas la transferencia.');}
 }
 
 // TARJETAS
@@ -587,7 +618,11 @@ function ET(id){
 
 function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjeta';['ftn','ftb','ftnu','ftv'].forEach(function(f){document.getElementById(f).value='';});['ftl','fts','ftmin','ftcat','ftco','ftpa'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('ftm').value='MXN';document.querySelector('#mt .btn').textContent='Agregar tarjeta';AM('mt');}
 
-function GT(){var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0};if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();}
+function GT(){
+try{
+var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0};if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();
+}catch(err){console.error('Error en GT (guardar tarjeta):',err);alert('Ocurrió un error al guardar la tarjeta. Revisa la consola (F12) y avisa a soporte.');}
+}
 
 function ELT(id){id=+id;if(!confirm('¿Eliminar?'))return;E.tarjetas=E.tarjetas.filter(function(x){return x.id!==id;});SAV();RT();}
 function VDT(id){id=+id;var t=E.tarjetas.find(function(x){return x.id===id;});if(!t)return;var h=(t.corte?DR('Día corte',t.corte):'')+DR('Día pago',t.pago+(t.pago2?' y '+t.pago2:''))+DR('Banco',t.banco)+DR('Número',t.numero)+DR('Vencimiento',t.vencimiento)+DR('CAT',t.cat+'%')+DR('Límite',fmt(t.limite,t.moneda))+DR('Saldo',fmt(t.saldo,t.moneda))+DR('Pago mín.',fmt(t.minimo,t.moneda))+DR('Disponible',fmt(t.limite-t.saldo,t.moneda));
@@ -617,7 +652,11 @@ function RP(){
 }
 function ONP(){edP=null;document.getElementById('mpt').textContent='Nuevo préstamo';['fpn','fpo','fpfi','fppp'].forEach(function(f){document.getElementById(f).value='';});['fpmo','fpsa','fpta','fpca','fppl','fppg','fppm'].forEach(function(f){document.getElementById(f).value='';});delete document.getElementById('fpsa').dataset.tocado;document.getElementById('fpm').value='MXN';document.querySelector('#mp .btn').textContent='Agregar préstamo';AM('mp');}
 function EP(id){id=+id;var p=E.prestamos.find(function(x){return x.id===id;});if(!p)return;edP=id;document.getElementById('mpt').textContent='Editar préstamo';document.getElementById('fpn').value=p.nombre||'';document.getElementById('fpo').value=p.otorgante||'';document.getElementById('fpm').value=p.moneda||'MXN';document.getElementById('fpfi').value=p.fechaInicio||'';document.getElementById('fppp').value=p.proximoPago||'';document.getElementById('fpmo').value=p.monto||'';document.getElementById('fpsa').value=p.saldo||'';document.getElementById('fpsa').dataset.tocado='1';document.getElementById('fpta').value=p.tasa||'';document.getElementById('fpca').value=p.cat||'';document.getElementById('fppl').value=p.plazo||'';document.getElementById('fppg').value=p.pagado||'';document.getElementById('fppm').value=p.pagomensual||'';document.querySelector('#mp .btn').textContent='Guardar cambios';AM('mp');}
-function GP(){var p={nombre:document.getElementById('fpn').value,otorgante:document.getElementById('fpo').value,moneda:document.getElementById('fpm').value,monto:parseFloat(document.getElementById('fpmo').value)||0,saldo:parseFloat(document.getElementById('fpsa').value)||0,tasa:parseFloat(document.getElementById('fpta').value)||0,cat:parseFloat(document.getElementById('fpca').value)||0,plazo:parseInt(document.getElementById('fppl').value)||0,pagado:parseInt(document.getElementById('fppg').value)||0,pagomensual:parseFloat(document.getElementById('fppm').value)||0,fechaInicio:document.getElementById('fpfi').value,proximoPago:document.getElementById('fppp').value};if(!p.nombre)return;if(edP){var i=E.prestamos.findIndex(function(x){return x.id===edP;});if(i>=0){var saldoAnt=E.prestamos[i].saldo;var delta=p.saldo-saldoAnt;p.id=edP;E.prestamos[i]=p;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+p.nombre,monto:delta,tipo:'ajuste',origen:'p_'+edP,prestamo:edP});}}}else{p.id=uid();E.prestamos.push(p);}SAV();CM('mp');RP();RM();}
+function GP(){
+try{
+var p={nombre:document.getElementById('fpn').value,otorgante:document.getElementById('fpo').value,moneda:document.getElementById('fpm').value,monto:parseFloat(document.getElementById('fpmo').value)||0,saldo:parseFloat(document.getElementById('fpsa').value)||0,tasa:parseFloat(document.getElementById('fpta').value)||0,cat:parseFloat(document.getElementById('fpca').value)||0,plazo:parseInt(document.getElementById('fppl').value)||0,pagado:parseInt(document.getElementById('fppg').value)||0,pagomensual:parseFloat(document.getElementById('fppm').value)||0,fechaInicio:document.getElementById('fpfi').value,proximoPago:document.getElementById('fppp').value};if(!p.nombre)return;if(edP){var i=E.prestamos.findIndex(function(x){return x.id===edP;});if(i>=0){var saldoAnt=E.prestamos[i].saldo;var delta=p.saldo-saldoAnt;p.id=edP;E.prestamos[i]=p;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+p.nombre,monto:delta,tipo:'ajuste',origen:'p_'+edP,prestamo:edP});}}}else{p.id=uid();E.prestamos.push(p);}SAV();CM('mp');RP();RM();
+}catch(err){console.error('Error en GP (guardar préstamo):',err);alert('Ocurrió un error al guardar el préstamo. Revisa la consola (F12) y avisa a soporte.');}
+}
 function ELP(id){id=+id;if(!confirm('¿Eliminar?'))return;E.prestamos=E.prestamos.filter(function(x){return x.id!==id;});SAV();RP();}
 function VTP(id){id=+id;var p=E.prestamos.find(function(x){return x.id===id;});if(!p)return;document.getElementById('mptt').textContent='Tabla — '+p.nombre;var rows=GTB(p),h='<table><thead><tr><th>#</th><th>Pago</th><th>Capital</th><th>Interés</th><th>Saldo</th></tr></thead><tbody>';rows.forEach(function(r){h+='<tr><td style="color:var(--muted)">'+r.num+'</td><td>'+fmt(r.pago,p.moneda)+'</td><td>'+fmt(r.capital,p.moneda)+'</td><td>'+fmt(r.interes,p.moneda)+'</td><td style="color:var(--red)">'+fmt(r.saldo,p.moneda)+'</td></tr>';});h+='</tbody></table>';document.getElementById('mptabb').innerHTML=h;AM('mptab');}
 
@@ -628,12 +667,16 @@ function ASC(){var c=document.getElementById('fmca').value,s=E.categorias[c]||[]
 function llenarCuentasOri(sel,selVal){sel.innerHTML='<option value="">Sin cuenta origen</option>';E.cuentas.forEach(function(c){sel.innerHTML+='<option value="c_'+c.id+'"'+(selVal==='c_'+c.id?' selected':'')+'>'+c.nombre+'</option>';});if(selVal)for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===selVal){sel.selectedIndex=i;break;}}}
 function CHKTR(){} 
 function ONM(){edMovId=null;document.querySelector('#mm .btn').textContent='Agregar movimiento';STM('gasto');document.getElementById('fmf').value=hoy();document.getElementById('fmd').value='';document.getElementById('fmmo').value='';var cs=document.getElementById('fmcu');cs.innerHTML='<option value="">Sin origen</option>';cs.innerHTML+='<optgroup label="Cuentas">';E.cuentas.forEach(function(c){cs.innerHTML+='<option value="c_'+c.id+'">'+c.nombre+'</option>';});cs.innerHTML+='</optgroup>';if(E.tarjetas.length){cs.innerHTML+='<optgroup label="Tarjetas de crédito">';E.tarjetas.forEach(function(t){cs.innerHTML+='<option value="t_'+t.id+'">'+t.nombre+'</option>';});cs.innerHTML+='</optgroup>';}if(E.prestamos.length){cs.innerHTML+='<optgroup label="Préstamos">';E.prestamos.forEach(function(p){cs.innerHTML+='<option value="p_'+p.id+'">'+p.nombre+'</option>';});cs.innerHTML+='</optgroup>';}var ca=document.getElementById('fmca');llenarCats(ca,null,'gasto');ASC();AM('mm');}
-function GM(){var mo=parseFloat(document.getElementById('fmmo').value)||0;var origen=document.getElementById('fmcu').value;var m={id:uid(),fecha:document.getElementById('fmf').value||hoy(),descripcion:document.getElementById('fmd').value,monto:tipoM==='gasto'?-Math.abs(mo):Math.abs(mo),tipo:tipoM,categoria:document.getElementById('fmca').value,subcategoria:document.getElementById('fmsc').value,origen:origen};if(!m.descripcion||!mo)return;
+function GM(){
+try{
+var mo=parseFloat(document.getElementById('fmmo').value)||0;var origen=document.getElementById('fmcu').value;var m={id:uid(),fecha:document.getElementById('fmf').value||hoy(),descripcion:document.getElementById('fmd').value,monto:tipoM==='gasto'?-Math.abs(mo):Math.abs(mo),tipo:tipoM,categoria:document.getElementById('fmca').value,subcategoria:document.getElementById('fmsc').value,origen:origen};if(!m.descripcion||!mo)return;
 // Afectar saldo según origen
 if(origen.startsWith('c_')){var cid=parseInt(origen.slice(2));var cu=E.cuentas.find(function(x){return x.id===cid;});if(cu)cu.saldo+=m.monto;m.cuenta=cid;}
 else if(origen.startsWith('t_')){var tid=parseInt(origen.slice(2));var ta=E.tarjetas.find(function(x){return x.id===tid;});if(ta&&tipoM==='gasto')ta.saldo+=Math.abs(mo);m.tarjeta=tid;}
 else if(origen.startsWith('p_')){var pid=parseInt(origen.slice(2));m.prestamo=pid;}
-E.movimientos.unshift(m);SAV();CM('mm');RM();RC();RT();}
+E.movimientos.unshift(m);SAV();CM('mm');RM();RC();RT();
+}catch(err){console.error('Error en GM (guardar movimiento):',err);alert('Ocurrió un error al guardar el movimiento. Revisa la consola (F12) y avisa a soporte.');}
+}
 function RM(){
   var movs=E.movimientos.filter(function(m){if(filtM.tipo!=='todos'&&m.tipo!==filtM.tipo)return false;if(filtM.cuenta!=='todas'&&String(m.cuenta)!==filtM.cuenta)return false;if(busM&&m.descripcion.toLowerCase().indexOf(busM.toLowerCase())<0)return false;return true;}).sort(function(a,b){return parseD(b.fecha)-parseD(a.fecha);});
   var ing=movs.filter(function(m){return m.monto>0&&m.tipo!=='transferencia'&&m.tipo!=='ajuste';}).reduce(function(s,m){return s+m.monto;},0);
@@ -792,11 +835,16 @@ function OPAG(tipo,id,monto,desc){
   CM('mcal');AM('mpag');
 }
 function GPAG(){
+try{
   var mo=parseFloat(document.getElementById('mpag-mo').value)||0;
   var cu=document.getElementById('mpag-cu').value;
   var fecha=document.getElementById('mpag-f').value||hoy();
   var desc=document.getElementById('mpag-desc').value;
   if(!mo)return;
+  // Registrar como movimiento tipo 'transferencia' (no afecta reportes de gastos)
+  var trDest=_pagTipo==='tarjeta'?'t_'+_pagId:'p_'+_pagId;
+  var m={id:uid(),fecha:fecha,descripcion:desc,monto:-mo,montoDest:mo,tipo:'transferencia',trOrigen:cu||'',trDestino:trDest};
+  if(cu&&cu.startsWith('c_'))m.cuenta=parseInt(cu.slice(2));
   // Afectar cuenta origen si se eligió
   if(cu.startsWith('c_')){var cid=parseInt(cu.slice(2));var c=E.cuentas.find(function(x){return x.id===cid;});if(c)c.saldo-=mo;}
   // Afectar tarjeta o préstamo
@@ -812,12 +860,9 @@ function GPAG(){
     if(!E.calPagados)E.calPagados={};
     var df=parseD(fecha);E.calPagados[calKey('prestamo',_pagId,df.getFullYear(),df.getMonth())]=true;
   }
-  // Registrar como movimiento tipo 'transferencia' (no afecta reportes de gastos)
-  var trDest=_pagTipo==='tarjeta'?'t_'+_pagId:'p_'+_pagId;
-  var m={id:uid(),fecha:fecha,descripcion:desc,monto:-mo,montoDest:mo,tipo:'transferencia',trOrigen:cu||'',trDestino:trDest};
-  if(cu&&cu.startsWith('c_'))m.cuenta=parseInt(cu.slice(2));
   E.movimientos.unshift(m);
   SAV();CM('mpag');RM();RC();RT();ATP();
+}catch(err){console.error('Error en GPAG (registrar pago):',err);alert('Ocurrió un error al registrar el pago. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas el pago.');}
 }
 function PAGARCAL(tipo,id,monto,desc){
   if(tipo==='tarjeta'||tipo==='prestamo'){
@@ -1114,6 +1159,7 @@ function EMov(id){
   AM('mm');
 }
 function GMEdit(){
+try{
   // override GM when editing
   if(!edMovId){GM();return;}
   var mo=parseFloat(document.getElementById('fmmo').value)||0;
@@ -1132,6 +1178,7 @@ function GMEdit(){
   edMovId=null;
   document.querySelector('#mm .btn').textContent='Agregar movimiento';
   SAV();CM('mm');RM();RC();RT();
+}catch(err){console.error('Error en GMEdit (editar movimiento):',err);alert('Ocurrió un error al editar el movimiento. Revisa la consola (F12) y avisa a soporte.');}
 }
 
 // PRESUPUESTO
