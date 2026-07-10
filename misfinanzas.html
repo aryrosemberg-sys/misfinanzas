@@ -773,7 +773,17 @@ function ELM(id){
 // quincena tenga su propia marca. Sin dia, la llave es la de siempre (compatibilidad).
 function calKey(tipo,id,y,m,dia){return tipo+'_'+id+'_'+y+'-'+(m<9?'0':'')+(m+1)+(dia?'_d'+dia:'');}
 function esPagadoCal(tipo,id,dia){return !!(E.calPagados&&E.calPagados[calKey(tipo,id,calY,calM,dia)]);}
-function toggleCal(tipo,id,dia){if(!E.calPagados)E.calPagados={};var k=calKey(tipo,id,calY,calM,dia||null);if(E.calPagados[k])delete E.calPagados[k];else E.calPagados[k]=true;SAV();RCAL();CM('mcal');}
+function toggleCal(tipo,id,dia){
+  if(!E.calPagados)E.calPagados={};
+  var k=calKey(tipo,id,calY,calM,dia||null);
+  if(E.calPagados[k]){
+    // Si un movimiento generó esta marca, desmarcar NO revierte saldos. Hay que avisarlo.
+    var mv=E.movimientos.find(function(x){return x.calKey===k;});
+    if(mv&&!confirm('Este pago tiene un movimiento asociado:\n\n'+mv.descripcion+'   '+fmt(mv.monto)+'\n\nDesmarcar solo quita la palomita. El movimiento y los saldos NO cambian.\n\nPara deshacer el pago de verdad, bórralo desde Movimientos.\n\n¿Desmarcar de todos modos?'))return;
+    delete E.calPagados[k];
+  } else E.calPagados[k]=true;
+  SAV();RCAL();CM('mcal');
+}
 // Escapa un valor para meterlo dentro de una cadena JS en un atributo onclick.
 function jsq(v){return String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
@@ -787,7 +797,7 @@ function buildEvCal(){
     dias.forEach(function(dp,idx){
       if(!dp)return;
       var kd=quinc?dp:null;                    // quincenales: una llave por día de pago
-      var pagado=esPagadoCal('tarjeta',t.id,kd);
+      var pagado=esPagadoCal('tarjeta',t.id,kd),auto=false;
       if(!quinc&&!pagado){
         // Auto-detección: un abono registrado directamente sobre la tarjeta este mes
         pagado=E.movimientos.some(function(m){
@@ -795,9 +805,10 @@ function buildEvCal(){
           var d=parseD(m.fecha);
           return d.getMonth()===calM&&d.getFullYear()===calY&&m.monto>0;
         });
+        auto=pagado;
       }
       var suf=quinc?(idx===0?' (1ª quincena)':' (2ª quincena)'):'';
-      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo,kd:kd});
+      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo,kd:kd,auto:auto});
     });
   });
   // Préstamos: se repiten TODOS los meses mientras haya saldo, a partir de proximoPago.
@@ -812,7 +823,22 @@ function buildEvCal(){
     var pagado=esPagadoCal('prestamo',p.id);
     ev.push({dia:Math.min(dia,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:null});
   });
-  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:Math.min(f.dia,dimsMes),label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto,kd:null});});}
+  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var fid=f.id||f.nombre;
+    var pagado=esPagadoCal('fijo',fid),auto=false;
+    var mv=movDeFijo(f);
+    if(!pagado&&mv){pagado=true;auto=true;}
+    if(pagado&&!mv){mv=E.movimientos.find(function(x){return x.calKey===calKey('fijo',fid,calY,calM,null);})||null;}
+    // Monto a mostrar: el REAL si ya se pagó; si no, el estimado (marcado con ~)
+    var sub;
+    if(pagado&&mv){
+      var real=Math.abs(mv.monto);
+      sub=fmt(real,'MXN');
+      if(f.estimado&&Math.abs(real-f.monto)>1)sub+=' · est. '+fmt(f.monto,'MXN');
+    } else {
+      sub=(f.estimado?'~':'')+fmt(f.monto,'MXN')+(f.estimado?' (est.)':'');
+    }
+    // Los estimados no prellenan monto: hay que capturar el recibo real.
+    ev.push({dia:Math.min(f.dia,dimsMes),label:f.nombre,sub:sub,color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:fid,pagado:pagado,monto:(f.estimado?0:f.monto),kd:null,auto:auto});});}
   return ev;
 }
 
@@ -842,7 +868,9 @@ function RCAL(){
     h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:17px;min-width:26px;text-align:center">'+e.dia+'</span>';
     h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:13px">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
     if(esPagable){
-      if(e.pagado){
+      if(e.pagado&&e.auto){
+        h+='<span title="Detectado por un movimiento de este mes" style="color:var(--muted);font-size:10px;flex-shrink:0;margin-left:6px;white-space:nowrap">vía movimiento</span>';
+      } else if(e.pagado){
         h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');RCAL()" style="background:var(--border);border:none;border-radius:8px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">Desmarcar</button>';
       } else {
         h+='<button onclick="PAGARCAL(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:5px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">\u2192 Pagar</button>';
@@ -855,6 +883,23 @@ function RCAL(){
 
 // Refresco de calendario a prueba de fallos (no debe romper el guardado de movimientos)
 function RCALq(){try{RCAL();}catch(e){console.error('RCAL:',e);}}
+
+// ¿Existe ya un gasto en el mes visible que corresponda a este gasto fijo?
+// Un movimiento cuenta si coincide el NOMBRE con la descripción, o bien categoría+subcategoría.
+// (Los nombres/subcategorías capturados a mano no siempre empatan; por eso el OR.)
+// Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
+function movDeFijo(f){
+  var nf=(f.nombre||'').trim().toLowerCase();
+  return E.movimientos.find(function(m){
+    if(m.tipo!=='gasto')return false;
+    var d=parseD(m.fecha);
+    if(!d||d.getMonth()!==calM||d.getFullYear()!==calY)return false;
+    var dm=(m.descripcion||'').trim().toLowerCase();
+    if(nf&&dm===nf)return true;
+    if(f.categoria&&f.subcategoria&&m.categoria===f.categoria&&m.subcategoria===f.subcategoria)return true;
+    return false;
+  })||null;
+}
 
 function ODCAL(dia){
   var ev=buildEvCal().filter(function(e){return e.dia===dia;});
@@ -871,7 +916,9 @@ function ODCAL(dia){
     h+='</div>';
     if(esPagable){
       var tipoBase2=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
-      if(e.pagado){
+      if(e.pagado&&e.auto){
+        h+='<span style="color:var(--muted);font-size:11px;flex-shrink:0">vía movimiento</span>';
+      } else if(e.pagado){
         h+='<button onclick="toggleCal(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');ODCAL('+dia+')" style="background:var(--border);border:none;border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Desmarcar</button>';
       } else {
         h+='<button onclick="PAGARCAL(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">\u2192 Registrar pago</button>';
@@ -1369,10 +1416,10 @@ function RPRES(){
 
 // -- GASTOS FIJOS --
 var editPFId=null;
-function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pffrec').value='Mensual';var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';AM('mpf');}
-function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF();document.getElementById('pfsc').value=f.subcategoria||'';document.getElementById('pftt').textContent='Editar gasto fijo';AM('mpf');}
+function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';AM('mpf');}
+function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF();document.getElementById('pfsc').value=f.subcategoria||'';document.getElementById('pftt').textContent='Editar gasto fijo';AM('mpf');}
 function ASCPF(){var c=document.getElementById('pfcat').value,sc=document.getElementById('pfsc');sc.innerHTML='<option value="">Sin subcategoría</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});}
-function GAF(){var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,di=parseInt(document.getElementById('pfdi').value)||null,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value;if(!n||!m)return;if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};if(editPFId){var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});if(i>=0)E.presupuesto.fijos[i]={id:editPFId,nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc};}else{E.presupuesto.fijos.push({id:Date.now(),nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc});}SAV();CM('mpf');RPRES();}
+function GAF(){var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,di=parseInt(document.getElementById('pfdi').value)||null,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value,est=document.getElementById('pfest').checked;if(!n||!m)return;if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};if(editPFId){var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});if(i>=0)E.presupuesto.fijos[i]={id:editPFId,nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc,estimado:est};}else{E.presupuesto.fijos.push({id:uid(),nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc,estimado:est});}SAV();CM('mpf');RPRES();RCALq();}
 function DDF(id){if(!confirm('¿Eliminar este gasto fijo?'))return;E.presupuesto.fijos=E.presupuesto.fijos.filter(function(x){return x.id!==id;});SAV();RPRES();}
 
 // -- GASTOS VARIABLES --
@@ -1659,6 +1706,10 @@ LOD(function(){RND('c');if(window.innerWidth>=768){var l=document.getElementById
   <div class="mh"><h2 id="pftt">Nuevo gasto fijo</h2><button class="mc" onclick="CM('mpf')">×</button></div>
   <div class="field"><label>Nombre</label><input id="pfn" placeholder="Ej: Colegio Tarbut"/></div>
   <div class="field"><label>Monto</label><input id="pfm" type="number" placeholder="0.00"/></div>
+  <div class="field" style="display:flex;align-items:center;gap:8px">
+    <input id="pfest" type="checkbox" style="width:18px;height:18px;flex-shrink:0"/>
+    <label for="pfest" style="margin:0;cursor:pointer">Monto variable (estimado) — luz, gas, agua…</label>
+  </div>
   <div class="field"><label>Frecuencia</label><select id="pffrec"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
   <div class="field"><label>Día de pago (del mes)</label><input id="pfdi" type="number" min="1" max="31" placeholder="Ej: 15"/></div>
   <div class="field"><label>Categoría</label><select id="pfcat" onchange="ASCPF()"></select></div>
