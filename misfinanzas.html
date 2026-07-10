@@ -263,6 +263,7 @@ tr:nth-child(even){background:var(--surface)}
     <div class="field"><label>CAT %</label><input id="ftcat" type="number"/></div>
     <div class="field"><label>Día corte</label><input id="ftco" type="number"/></div>
     <div class="field"><label>Día pago</label><input id="ftpa" type="number"/></div>
+    <div class="field"><label>2° día pago (quincenal)</label><input id="ftpa2" type="number" placeholder="opcional"/></div>
   </div>
   <div class="field"><label>Vencimiento (AAAA-MM)</label><input id="ftv" placeholder="2028-05"/></div>
   <button class="btn bp bw" onclick="GT()">Agregar tarjeta</button>
@@ -347,6 +348,9 @@ var NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septi
 var SB_URL='https://xlrokhkebhmxqmeqlzfa.supabase.co';
 var SB_KEY='sb_publishable_4B8ppshvNFRQGOGjvBoJWw_CKBBE-ZC';
 
+// _cargaOK: solo permitimos escribir en la nube si la carga inicial fue exitosa.
+// Sin esto, un fallo de red al arrancar deja E vacío y el primer SAV() borra todo.
+var _cargaOK=false;
 var _savQueue=Promise.resolve();
 var _savPendingCount=0;
 function _updSavIndicator(){
@@ -355,6 +359,12 @@ function _updSavIndicator(){
   b.style.display=_savPendingCount>0?'inline-block':'none';
 }
 async function _doSave(){
+  if(!_cargaOK){
+    console.warn('Guardado BLOQUEADO: la carga inicial no fue exitosa.');
+    var bb=document.getElementById('bkmsg');
+    if(bb)bb.innerHTML='<div class="merr">🛑 Guardado bloqueado: no se cargaron tus datos desde la nube. Recarga la app con conexión.</div>';
+    return;
+  }
   var snapshot=JSON.parse(JSON.stringify(E));
   try{
     var resp=await fetch(SB_URL+'/rest/v1/datos',{
@@ -387,15 +397,26 @@ async function LOD(cb){
     var resp=await fetch(SB_URL+'/rest/v1/datos?id=eq.state&select=contenido',{
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
     });
-    if(resp.ok){
-      var rows=await resp.json();
-      if(rows&&rows.length>0&&rows[0].contenido){
-        E=estado=rows[0].contenido;
-        cb();return;
-      }
-    }
-  }catch(err){}
-  try{var lb=localStorage.getItem('mf_backup');if(lb){E=estado=JSON.parse(lb);}}catch(_){}
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var rows=await resp.json();
+    if(rows&&rows.length>0&&rows[0].contenido)E=estado=rows[0].contenido;
+    // Llegamos a la nube (con datos o vacía): es seguro escribir.
+    _cargaOK=true;
+    try{localStorage.setItem('mf_backup',JSON.stringify(E));}catch(_){}
+    cb();return;
+  }catch(err){
+    console.error('LOD falló:',err);
+  }
+  // No pudimos leer la nube. NO habilitamos guardado.
+  _cargaOK=false;
+  var lb=null;
+  try{lb=localStorage.getItem('mf_backup');}catch(_){}
+  if(lb){
+    try{E=estado=JSON.parse(lb);}catch(_){}
+    setTimeout(function(){alert('⚠️ No se pudo conectar a la nube.\n\nEstás viendo una COPIA LOCAL. Los cambios NO se guardarán.\n\nRecarga la app cuando tengas conexión.');},400);
+  }else{
+    setTimeout(function(){alert('🛑 No se pudieron cargar tus datos y no hay copia local en este dispositivo.\n\nNO uses la app aquí hasta recuperar conexión.\n\n(El guardado está bloqueado para proteger tu información.)');},400);
+  }
   cb();
 }
 
@@ -404,7 +425,7 @@ function fmt(n,c){return new Intl.NumberFormat('es-MX',{style:'currency',currenc
 function parseD(d){if(!d)return null;return new Date(d.length===10?d+'T12:00:00':d);}
 function fmtD(d){if(!d)return '';return parseD(d).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});}
 function hoy(){return new Date().toISOString().slice(0,10);}
-function uid(){return Date.now();}
+function uid(){return Date.now()*1000+Math.floor(Math.random()*1000);}
 function bdg(t,c){return '<span class="badge" style="background:'+c+'22;color:'+c+'">'+t+'</span>';}
 function bar(v,mx,c){var p=mx>0?Math.min((v/mx)*100,100):0;var cl=p>80?'var(--red)':p>60?'var(--amber)':(c||'var(--accent)');return '<div class="bwrap"><div class="bfill" style="width:'+p+'%;background:'+cl+'"></div></div>';}
 function DR(k,v){return '<div class="dr"><span>'+k+'</span><span>'+v+'</span></div>';}
@@ -531,13 +552,18 @@ try{
   var movObj={id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval};
   ajustarTR(dval,-mo);   // origen pierde
   ajustarTR(aval,moDest); // destino gana
-  // Marcar pagado en calendario si destino es tarjeta o préstamo
+  // Marcar pagado en calendario si destino es tarjeta o préstamo.
+  // En tarjetas quincenales no marcamos: no sabemos a cuál quincena corresponde.
   if(!E.calPagados)E.calPagados={};
   var hd=new Date();
-  if(aval.startsWith('t_'))E.calPagados[calKey('tarjeta',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
-  if(aval.startsWith('p_'))E.calPagados[calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth())]=true;
+  if(aval.startsWith('t_')){
+    var tdid=parseInt(aval.slice(2));
+    var td=E.tarjetas.find(function(x){return x.id===tdid;});
+    if(td&&!td.pago2){var kt=calKey('tarjeta',tdid,hd.getFullYear(),hd.getMonth(),null);E.calPagados[kt]=true;movObj.calKey=kt;}
+  }
+  if(aval.startsWith('p_')){var kp=calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth(),null);E.calPagados[kp]=true;movObj.calKey=kp;}
   E.movimientos.unshift(movObj);
-  SAV();CM('mtr');RC();RT();RP();RM();
+  SAV();CM('mtr');RC();RT();RP();RM();RCALq();
 }catch(err){console.error('Error en HT (transferencia):',err);alert('Ocurrió un error al hacer la transferencia. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas la transferencia.');}
 }
 
@@ -612,15 +638,16 @@ function ET(id){
   document.getElementById('ftcat').value=t.cat||'';
   document.getElementById('ftco').value=t.corte||'';
   document.getElementById('ftpa').value=t.pago||'';
+  document.getElementById('ftpa2').value=t.pago2||'';
   document.querySelector('#mt .btn').textContent='Guardar cambios';
   AM('mt');
 }
 
-function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjeta';['ftn','ftb','ftnu','ftv'].forEach(function(f){document.getElementById(f).value='';});['ftl','fts','ftmin','ftcat','ftco','ftpa'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('ftm').value='MXN';document.querySelector('#mt .btn').textContent='Agregar tarjeta';AM('mt');}
+function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjeta';['ftn','ftb','ftnu','ftv'].forEach(function(f){document.getElementById(f).value='';});['ftl','fts','ftmin','ftcat','ftco','ftpa','ftpa2'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('ftm').value='MXN';document.querySelector('#mt .btn').textContent='Agregar tarjeta';AM('mt');}
 
 function GT(){
 try{
-var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0};if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();
+var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0,pago2:parseInt(document.getElementById('ftpa2').value)||0};if(!t.pago2)delete t.pago2;if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();
 }catch(err){console.error('Error en GT (guardar tarjeta):',err);alert('Ocurrió un error al guardar la tarjeta. Revisa la consola (F12) y avisa a soporte.');}
 }
 
@@ -666,7 +693,7 @@ function llenarCats(sel,valActual,soloTipo){var keys=Object.keys(E.categorias);v
 function ASC(){var c=document.getElementById('fmca').value,s=E.categorias[c]||[],w=document.getElementById('fmscw'),sel=document.getElementById('fmsc');if(!s.length){w.style.display='none';return;}w.style.display='';sel.innerHTML='<option value="">Sin subcategoría</option>';s.forEach(function(x){sel.innerHTML+='<option>'+x+'</option>';});}
 function llenarCuentasOri(sel,selVal){sel.innerHTML='<option value="">Sin cuenta origen</option>';E.cuentas.forEach(function(c){sel.innerHTML+='<option value="c_'+c.id+'"'+(selVal==='c_'+c.id?' selected':'')+'>'+c.nombre+'</option>';});if(selVal)for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===selVal){sel.selectedIndex=i;break;}}}
 function CHKTR(){} 
-function ONM(){edMovId=null;document.querySelector('#mm .btn').textContent='Agregar movimiento';STM('gasto');document.getElementById('fmf').value=hoy();document.getElementById('fmd').value='';document.getElementById('fmmo').value='';var cs=document.getElementById('fmcu');cs.innerHTML='<option value="">Sin origen</option>';cs.innerHTML+='<optgroup label="Cuentas">';E.cuentas.forEach(function(c){cs.innerHTML+='<option value="c_'+c.id+'">'+c.nombre+'</option>';});cs.innerHTML+='</optgroup>';if(E.tarjetas.length){cs.innerHTML+='<optgroup label="Tarjetas de crédito">';E.tarjetas.forEach(function(t){cs.innerHTML+='<option value="t_'+t.id+'">'+t.nombre+'</option>';});cs.innerHTML+='</optgroup>';}if(E.prestamos.length){cs.innerHTML+='<optgroup label="Préstamos">';E.prestamos.forEach(function(p){cs.innerHTML+='<option value="p_'+p.id+'">'+p.nombre+'</option>';});cs.innerHTML+='</optgroup>';}var ca=document.getElementById('fmca');llenarCats(ca,null,'gasto');ASC();AM('mm');}
+function ONM(){edMovId=null;_fijoPend=null;document.querySelector('#mm .btn').textContent='Agregar movimiento';STM('gasto');document.getElementById('fmf').value=hoy();document.getElementById('fmd').value='';document.getElementById('fmmo').value='';var cs=document.getElementById('fmcu');cs.innerHTML='<option value="">Sin origen</option>';cs.innerHTML+='<optgroup label="Cuentas">';E.cuentas.forEach(function(c){cs.innerHTML+='<option value="c_'+c.id+'">'+c.nombre+'</option>';});cs.innerHTML+='</optgroup>';if(E.tarjetas.length){cs.innerHTML+='<optgroup label="Tarjetas de crédito">';E.tarjetas.forEach(function(t){cs.innerHTML+='<option value="t_'+t.id+'">'+t.nombre+'</option>';});cs.innerHTML+='</optgroup>';}if(E.prestamos.length){cs.innerHTML+='<optgroup label="Préstamos">';E.prestamos.forEach(function(p){cs.innerHTML+='<option value="p_'+p.id+'">'+p.nombre+'</option>';});cs.innerHTML+='</optgroup>';}var ca=document.getElementById('fmca');llenarCats(ca,null,'gasto');ASC();AM('mm');}
 function GM(){
 try{
 var mo=parseFloat(document.getElementById('fmmo').value)||0;var origen=document.getElementById('fmcu').value;var m={id:uid(),fecha:document.getElementById('fmf').value||hoy(),descripcion:document.getElementById('fmd').value,monto:tipoM==='gasto'?-Math.abs(mo):Math.abs(mo),tipo:tipoM,categoria:document.getElementById('fmca').value,subcategoria:document.getElementById('fmsc').value,origen:origen};if(!m.descripcion||!mo)return;
@@ -674,8 +701,16 @@ var mo=parseFloat(document.getElementById('fmmo').value)||0;var origen=document.
 if(origen.startsWith('c_')){var cid=parseInt(origen.slice(2));var cu=E.cuentas.find(function(x){return x.id===cid;});if(cu)cu.saldo+=m.monto;m.cuenta=cid;}
 else if(origen.startsWith('t_')){var tid=parseInt(origen.slice(2));var ta=E.tarjetas.find(function(x){return x.id===tid;});if(ta&&tipoM==='gasto')ta.saldo+=Math.abs(mo);m.tarjeta=tid;}
 else if(origen.startsWith('p_')){var pid=parseInt(origen.slice(2));m.prestamo=pid;}
-E.movimientos.unshift(m);SAV();CM('mm');RM();RC();RT();
-}catch(err){console.error('Error en GM (guardar movimiento):',err);alert('Ocurrió un error al guardar el movimiento. Revisa la consola (F12) y avisa a soporte.');}
+E.movimientos.unshift(m);
+// Si venimos de "Pagar" un gasto fijo del calendario, marcarlo como pagado.
+if(_fijoPend){
+  if(!E.calPagados)E.calPagados={};
+  var kf=calKey('fijo',_fijoPend.id,_fijoPend.y,_fijoPend.m,null);
+  E.calPagados[kf]=true;m.calKey=kf;
+  _fijoPend=null;
+}
+SAV();CM('mm');RM();RC();RT();RCALq();
+}catch(err){_fijoPend=null;console.error('Error en GM (guardar movimiento):',err);alert('Ocurrió un error al guardar el movimiento. Revisa la consola (F12) y avisa a soporte.');}
 }
 function RM(){
   var movs=E.movimientos.filter(function(m){if(filtM.tipo!=='todos'&&m.tipo!==filtM.tipo)return false;if(filtM.cuenta!=='todas'&&String(m.cuenta)!==filtM.cuenta)return false;if(busM&&m.descripcion.toLowerCase().indexOf(busM.toLowerCase())<0)return false;return true;}).sort(function(a,b){return parseD(b.fecha)-parseD(a.fecha);});
@@ -696,22 +731,26 @@ function ELM(id){
   id=+id;
   var m=E.movimientos.find(function(x){return x.id===id;});
   if(!m)return;
+  if(!confirm('¿Eliminar este movimiento?\n\n'+m.descripcion+'\n'+fmt(m.monto)+'\n\nSe revertirán los saldos afectados.'))return;
   // Revertir saldo según tipo de movimiento
   if(m.tipo==='transferencia'){
-    // Revertir origen (cuenta que pagó)
+    // Revertir origen (el que pagó). Para tarjeta/préstamo, una disposición SUBIÓ la deuda,
+    // así que al revertir hay que BAJARLA.
     if(m.trOrigen){
       var v=m.trOrigen;
       if(v.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(v.slice(2));});if(c)c.saldo+=Math.abs(m.monto);}
-      else if(v.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(v.slice(2));});if(t)t.saldo+=Math.abs(m.monto);}
-      else if(v.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(v.slice(2));});if(p)p.saldo+=Math.abs(m.monto);}
+      else if(v.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(v.slice(2));});if(t)t.saldo-=Math.abs(m.monto);}
+      else if(v.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(v.slice(2));});if(p)p.saldo-=Math.abs(m.monto);}
     }
-    // Revertir destino
+    // Revertir destino usando el monto REALMENTE aplicado (montoDest)
     if(m.trDestino){
       var v=m.trDestino;
       if(v.startsWith('c_')){var c=E.cuentas.find(function(x){return x.id===parseInt(v.slice(2));});if(c)c.saldo-=Math.abs(m.montoDest||m.monto);}
       else if(v.startsWith('t_')){var t=E.tarjetas.find(function(x){return x.id===parseInt(v.slice(2));});if(t)t.saldo+=Math.abs(m.montoDest||m.monto);}
       else if(v.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(v.slice(2));});if(p)p.saldo+=Math.abs(m.montoDest||m.monto);}
     }
+    // Deshacer el contador de pagos del préstamo
+    if(m.pagoPrestamo){var pp=E.prestamos.find(function(x){return x.id===m.pagoPrestamo;});if(pp&&pp.pagado>0)pp.pagado-=1;}
   } else if(m.tipo==='ajuste'){
     // Ajuste manual de saldo: revertir el delta sobre la cuenta/tarjeta/préstamo correspondiente
     if(m.cuenta){var c=E.cuentas.find(function(x){return x.id===m.cuenta;});if(c)c.saldo-=m.monto;}
@@ -722,31 +761,58 @@ function ELM(id){
     if(m.cuenta){var c=E.cuentas.find(function(x){return x.id===m.cuenta;});if(c)c.saldo-=m.monto;}
     if(m.tarjeta&&m.tipo==='gasto'){var t=E.tarjetas.find(function(x){return x.id===m.tarjeta;});if(t)t.saldo-=Math.abs(m.monto);}
   }
+  // Desmarcar el calendario si este movimiento lo había marcado como pagado
+  if(m.calKey&&E.calPagados&&E.calPagados[m.calKey])delete E.calPagados[m.calKey];
   E.movimientos=E.movimientos.filter(function(x){return x.id!==id;});
-  SAV();RM();RC();RT();RP();ATP();
+  SAV();RM();RC();RT();RP();RCALq();ATP();
 }
 
 // CALENDARIO
 // calPagados: {'fijo_ID_YYYY-MM': true, 'tarjeta_ID_YYYY-MM': true}
-function calKey(tipo,id,y,m){return tipo+'_'+id+'_'+y+'-'+(m<9?'0':'')+(m+1);}
-function esPagadoCal(tipo,id){return !!(E.calPagados&&E.calPagados[calKey(tipo,id,calY,calM)]);}
-function toggleCal(tipo,id){if(!E.calPagados)E.calPagados={};var k=calKey(tipo,id,calY,calM);if(E.calPagados[k])delete E.calPagados[k];else E.calPagados[k]=true;SAV();RCAL();CM('mcal');}
+// dia: solo se usa en productos quincenales (tarjetas con pago2), para que cada
+// quincena tenga su propia marca. Sin dia, la llave es la de siempre (compatibilidad).
+function calKey(tipo,id,y,m,dia){return tipo+'_'+id+'_'+y+'-'+(m<9?'0':'')+(m+1)+(dia?'_d'+dia:'');}
+function esPagadoCal(tipo,id,dia){return !!(E.calPagados&&E.calPagados[calKey(tipo,id,calY,calM,dia)]);}
+function toggleCal(tipo,id,dia){if(!E.calPagados)E.calPagados={};var k=calKey(tipo,id,calY,calM,dia||null);if(E.calPagados[k])delete E.calPagados[k];else E.calPagados[k]=true;SAV();RCAL();CM('mcal');}
+// Escapa un valor para meterlo dentro de una cadena JS en un atributo onclick.
+function jsq(v){return String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
 function buildEvCal(){
   var ev=[];
+  var dimsMes=new Date(calY,calM+1,0).getDate();
   E.tarjetas.forEach(function(t){
-    var ya=E.movimientos.some(function(m){
-      if(!m.tarjeta||m.tarjeta!==t.id||m.tipo==='ajuste')return false;
-      var d=parseD(m.fecha);
-      return d.getMonth()===calM&&d.getFullYear()===calY&&m.monto>0;
+    var quinc=!!t.pago2;   // tarjeta/revolvente de pago quincenal
+    if(t.corte)ev.push({dia:Math.min(t.corte,dimsMes),label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
+    var dias=quinc?[t.pago,t.pago2]:[t.pago];
+    dias.forEach(function(dp,idx){
+      if(!dp)return;
+      var kd=quinc?dp:null;                    // quincenales: una llave por día de pago
+      var pagado=esPagadoCal('tarjeta',t.id,kd);
+      if(!quinc&&!pagado){
+        // Auto-detección: un abono registrado directamente sobre la tarjeta este mes
+        pagado=E.movimientos.some(function(m){
+          if(!m.tarjeta||m.tarjeta!==t.id||m.tipo==='ajuste')return false;
+          var d=parseD(m.fecha);
+          return d.getMonth()===calM&&d.getFullYear()===calY&&m.monto>0;
+        });
+      }
+      var suf=quinc?(idx===0?' (1ª quincena)':' (2ª quincena)'):'';
+      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo,kd:kd});
     });
-    var pagado=ya||esPagadoCal('tarjeta',t.id);
-    if(t.corte)ev.push({dia:t.corte,label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
-    ev.push({dia:t.pago,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
-    if(t.pago2)ev.push({dia:t.pago2,label:'Pago: '+t.nombre,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo});
   });
-  E.prestamos.forEach(function(p){if(p.proximoPago){var d=parseD(p.proximoPago);if(d.getMonth()===calM&&d.getFullYear()===calY){var pagado=esPagadoCal('prestamo',p.id);ev.push({dia:d.getDate(),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado});}}});
-  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:f.dia,label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto});});}
+  // Préstamos: se repiten TODOS los meses mientras haya saldo, a partir de proximoPago.
+  E.prestamos.forEach(function(p){
+    if(!(p.saldo>0))return;
+    var dia=p.diaPago||(p.proximoPago?parseD(p.proximoPago).getDate():0);
+    if(!dia)return;
+    if(p.proximoPago){
+      var d0=parseD(p.proximoPago);
+      if(calY*12+calM < d0.getFullYear()*12+d0.getMonth())return;  // aún no arranca
+    }
+    var pagado=esPagadoCal('prestamo',p.id);
+    ev.push({dia:Math.min(dia,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:null});
+  });
+  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var pagado=esPagadoCal('fijo',f.id||f.nombre);ev.push({dia:Math.min(f.dia,dimsMes),label:f.nombre,sub:fmt(f.monto,'MXN'),color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:f.id||f.nombre,pagado:pagado,monto:f.monto,kd:null});});}
   return ev;
 }
 
@@ -777,15 +843,18 @@ function RCAL(){
     h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:13px">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
     if(esPagable){
       if(e.pagado){
-        h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+e.id+'\');RCAL()" style="background:var(--border);border:none;border-radius:8px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">Desmarcar</button>';
+        h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');RCAL()" style="background:var(--border);border:none;border-radius:8px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">Desmarcar</button>';
       } else {
-        h+='<button onclick="PAGARCAL(\''+tipoBase+'\',\''+e.id+'\',' +(e.monto||0)+',\''+e.label.replace(/\'/g,"\\'")+'\')" style="background:var(--accent);border:none;border-radius:8px;padding:5px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">\u2192 Pagar</button>';
+        h+='<button onclick="PAGARCAL(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:5px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">\u2192 Pagar</button>';
       }
     }
     h+='</div>';
   });
   document.getElementById('tca').innerHTML=h;
 }
+
+// Refresco de calendario a prueba de fallos (no debe romper el guardado de movimientos)
+function RCALq(){try{RCAL();}catch(e){console.error('RCAL:',e);}}
 
 function ODCAL(dia){
   var ev=buildEvCal().filter(function(e){return e.dia===dia;});
@@ -803,9 +872,9 @@ function ODCAL(dia){
     if(esPagable){
       var tipoBase2=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
       if(e.pagado){
-        h+='<button onclick="toggleCal(\''+tipoBase2+'\',\''+e.id+'\');ODCAL('+dia+')" style="background:var(--border);border:none;border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Desmarcar</button>';
+        h+='<button onclick="toggleCal(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');ODCAL('+dia+')" style="background:var(--border);border:none;border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Desmarcar</button>';
       } else {
-        h+='<button onclick="PAGARCAL(\''+tipoBase2+'\',\''+e.id+'\','+(e.monto||0)+',\''+e.label.replace(/'/g,"\\'")+'\')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">\u2192 Registrar pago</button>';
+        h+='<button onclick="PAGARCAL(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">\u2192 Registrar pago</button>';
       }
     }
     h+='</div>';
@@ -816,11 +885,17 @@ function ODCAL(dia){
 
 
 // PAGO DE TARJETA / PRÉSTAMO (transferencia, no es gasto)
-var _pagTipo=null,_pagId=null;
-function OPAG(tipo,id,monto,desc){
-  _pagTipo=tipo;_pagId=id;
+var _pagTipo=null,_pagId=null,_pagKd=null,_pagY=null,_pagM=null;
+function OPAG(tipo,id,monto,desc,dia,kd){
+  _pagTipo=tipo;_pagId=id;_pagKd=kd||null;
+  // La obligación pertenece al MES QUE ESTÁS VIENDO, no a la fecha en que mueves el dinero.
+  _pagY=calY;_pagM=calM;
   document.getElementById('mpag-titulo').textContent=tipo==='tarjeta'?'Pago de tarjeta':'Pago de préstamo';
-  document.getElementById('mpag-f').value=hoy();
+  var hd=new Date();
+  var enMesActual=(calY===hd.getFullYear()&&calM===hd.getMonth());
+  var dims=new Date(calY,calM+1,0).getDate();
+  var dEff=Math.min(dia||1,dims);
+  document.getElementById('mpag-f').value=enMesActual?hoy():(calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(dEff).padStart(2,'0'));
   document.getElementById('mpag-mo').value=monto||'';
   document.getElementById('mpag-desc').value=desc||'';
   // Info contextual
@@ -847,35 +922,41 @@ try{
   if(cu&&cu.startsWith('c_'))m.cuenta=parseInt(cu.slice(2));
   // Afectar cuenta origen si se eligió
   if(cu.startsWith('c_')){var cid=parseInt(cu.slice(2));var c=E.cuentas.find(function(x){return x.id===cid;});if(c)c.saldo-=mo;}
-  // Afectar tarjeta o préstamo
+  if(!E.calPagados)E.calPagados={};
+  var yy=(_pagY==null?calY:_pagY), mm=(_pagM==null?calM:_pagM);
+  // Afectar tarjeta o préstamo. Guardamos el monto REALMENTE aplicado (por si hay sobrepago)
+  // y la llave del calendario, para poder revertir con exactitud al borrar.
   if(_pagTipo==='tarjeta'){
     var ta=E.tarjetas.find(function(x){return x.id==_pagId;});
-    if(ta)ta.saldo=Math.max(0,ta.saldo-mo);
-    // Auto-marcar en calendario
-    if(!E.calPagados)E.calPagados={};
-    var df=parseD(fecha);E.calPagados[calKey('tarjeta',_pagId,df.getFullYear(),df.getMonth())]=true;
+    if(ta){m.montoDest=Math.min(mo,Math.max(ta.saldo,0));ta.saldo=Math.max(0,ta.saldo-mo);}
+    var k=calKey('tarjeta',_pagId,yy,mm,_pagKd||null);
+    E.calPagados[k]=true;m.calKey=k;
   } else if(_pagTipo==='prestamo'){
     var pr=E.prestamos.find(function(x){return x.id==_pagId;});
-    if(pr){pr.saldo=Math.max(0,(pr.saldo||0)-mo);pr.pagado=(pr.pagado||0)+1;}
-    if(!E.calPagados)E.calPagados={};
-    var df=parseD(fecha);E.calPagados[calKey('prestamo',_pagId,df.getFullYear(),df.getMonth())]=true;
+    if(pr){m.montoDest=Math.min(mo,Math.max(pr.saldo||0,0));pr.saldo=Math.max(0,(pr.saldo||0)-mo);pr.pagado=(pr.pagado||0)+1;m.pagoPrestamo=pr.id;}
+    var k2=calKey('prestamo',_pagId,yy,mm,null);
+    E.calPagados[k2]=true;m.calKey=k2;
   }
   E.movimientos.unshift(m);
-  SAV();CM('mpag');RM();RC();RT();ATP();
+  SAV();CM('mpag');RM();RC();RT();RP();RCALq();ATP();
 }catch(err){console.error('Error en GPAG (registrar pago):',err);alert('Ocurrió un error al registrar el pago. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas el pago.');}
 }
-function PAGARCAL(tipo,id,monto,desc){
+// _fijoPend: recuerda qué gasto fijo (y de qué mes) se está pagando, para que GM()
+// lo marque en el calendario al guardar el movimiento.
+var _fijoPend=null;
+function PAGARCAL(tipo,id,monto,desc,dia,kd){
   if(tipo==='tarjeta'||tipo==='prestamo'){
-    OPAG(tipo,id,monto,desc);
-  } else {
-    // Gasto fijo: navegar primero, luego abrir modal
-    CM('mcal');
-    var btn=document.querySelector('.nav button:nth-child(4)');
-    if(btn)CT('m',btn);
-    ONM();
-    document.getElementById('fmd').value=desc;
-    document.getElementById('fmmo').value=monto||'';
+    OPAG(tipo,id,monto,desc,dia,kd);
+    return;
   }
+  // Gasto fijo: navegar primero, luego abrir modal
+  CM('mcal');
+  var btn=document.querySelector('.nav button:nth-child(4)');
+  if(btn)CT('m',btn);
+  ONM();                              // ONM limpia _fijoPend, por eso se asigna después
+  _fijoPend={id:id,y:calY,m:calM};
+  document.getElementById('fmd').value=desc;
+  document.getElementById('fmmo').value=monto||'';
 }
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
 
