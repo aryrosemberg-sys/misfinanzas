@@ -262,6 +262,10 @@ tr:nth-child(even){background:var(--surface)}
     <div class="field"><label>Saldo</label><input id="fts" type="number"/></div>
     <div class="field"><label>Pago mín.</label><input id="ftmin" type="number"/></div>
     <div class="field"><label>CAT %</label><input id="ftcat" type="number"/></div>
+    <div class="field" style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
+      <input id="ftminv" type="checkbox" style="width:18px;height:18px;flex-shrink:0"/>
+      <label for="ftminv" style="margin:0;cursor:pointer">El mínimo varía en cada corte (estimado)</label>
+    </div>
     <div class="field"><label>Día corte</label><input id="ftco" type="number"/></div>
     <div class="field"><label>Día pago</label><input id="ftpa" type="number"/></div>
     <div class="field"><label>2° día pago (quincenal)</label><input id="ftpa2" type="number" placeholder="opcional"/></div>
@@ -656,15 +660,16 @@ function ET(id){
   document.getElementById('ftco').value=t.corte||'';
   document.getElementById('ftpa').value=t.pago||'';
   document.getElementById('ftpa2').value=t.pago2||'';
+  document.getElementById('ftminv').checked=!!t.minVar;
   document.querySelector('#mt .btn').textContent='Guardar cambios';
   AM('mt');
 }
 
-function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjeta';['ftn','ftb','ftnu','ftv'].forEach(function(f){document.getElementById(f).value='';});['ftl','fts','ftmin','ftcat','ftco','ftpa','ftpa2'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('ftm').value='MXN';document.querySelector('#mt .btn').textContent='Agregar tarjeta';AM('mt');}
+function ONT(){edT=null;document.getElementById('mtt').textContent='Nueva tarjeta';['ftn','ftb','ftnu','ftv'].forEach(function(f){document.getElementById(f).value='';});['ftl','fts','ftmin','ftcat','ftco','ftpa','ftpa2'].forEach(function(f){document.getElementById(f).value='';});document.getElementById('ftminv').checked=false;document.getElementById('ftm').value='MXN';document.querySelector('#mt .btn').textContent='Agregar tarjeta';AM('mt');}
 
 function GT(){
 try{
-var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0,pago2:parseInt(document.getElementById('ftpa2').value)||0};if(!t.pago2)delete t.pago2;if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();
+var t={nombre:document.getElementById('ftn').value,banco:document.getElementById('ftb').value,numero:document.getElementById('ftnu').value,moneda:document.getElementById('ftm').value,vencimiento:document.getElementById('ftv').value,limite:parseFloat(document.getElementById('ftl').value)||0,saldo:parseFloat(document.getElementById('fts').value)||0,minimo:parseFloat(document.getElementById('ftmin').value)||0,cat:parseFloat(document.getElementById('ftcat').value)||0,corte:parseInt(document.getElementById('ftco').value)||0,pago:parseInt(document.getElementById('ftpa').value)||0,pago2:parseInt(document.getElementById('ftpa2').value)||0,minVar:document.getElementById('ftminv').checked};if(!t.pago2)delete t.pago2;if(!t.nombre)return;if(edT){var i=E.tarjetas.findIndex(function(x){return x.id===edT;});if(i>=0){var saldoAnt=E.tarjetas[i].saldo;var delta=t.saldo-saldoAnt;t.id=edT;E.tarjetas[i]=t;if(Math.abs(delta)>0.004){E.movimientos.unshift({id:uid(),fecha:hoy(),descripcion:'Ajuste manual de saldo — '+t.nombre,monto:delta,tipo:'ajuste',origen:'t_'+edT,tarjeta:edT});}}}else{t.id=uid();E.tarjetas.push(t);}SAV();CM('mt');RT();RM();
 }catch(err){console.error('Error en GT (guardar tarjeta):',err);alert('Ocurrió un error al guardar la tarjeta. Revisa la consola (F12) y avisa a soporte.');}
 }
 
@@ -823,7 +828,7 @@ function buildEvCal(){
   E.tarjetas.forEach(function(t){
     var quinc=!!t.pago2;   // tarjeta/revolvente de pago quincenal
     if(t.corte)ev.push({dia:Math.min(t.corte,dimsMes),label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
-    var dias=quinc?[t.pago,t.pago2]:[t.pago];
+    var dias=quinc?[t.pago,t.pago2].sort(function(a,b){return a-b;}):[t.pago];
     dias.forEach(function(dp,idx){
       if(!dp)return;
       var kd=quinc?dp:null;                    // quincenales: una llave por día de pago
@@ -838,7 +843,19 @@ function buildEvCal(){
         auto=pagado;
       }
       var suf=quinc?(idx===0?' (1ª quincena)':' (2ª quincena)'):'';
-      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:'Mín '+fmt(t.minimo,t.moneda),color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:t.minimo,kd:kd,auto:auto});
+      // Si ya se pagó, mostramos el monto REAL. Si no, el mínimo (marcado ~ si varía).
+      var mvp=pagado?movDePagoTarjeta(t,kd):null,sub;
+      if(pagado&&mvp){
+        var realT=Math.abs(mvp.montoDest||mvp.monto);
+        sub='Pagado '+fmt(realT,t.moneda);
+        if(t.minVar&&t.minimo&&Math.abs(realT-t.minimo)>1)sub+=' · mín. est. '+fmt(t.minimo,t.moneda);
+      } else if(pagado){
+        sub='Pagado';   // marca manual o heredada: no hay monto que mostrar
+      } else {
+        sub=(t.minVar?'~Mín ':'Mín ')+fmt(t.minimo,t.moneda)+(t.minVar?' (est.)':'');
+      }
+      // Los mínimos variables no prellenan monto: hay que capturar el del estado de cuenta.
+      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:sub,color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:(t.minVar?0:t.minimo),kd:kd,auto:auto});
     });
   });
   // Préstamos: se repiten TODOS los meses mientras haya saldo, a partir de proximoPago.
@@ -864,6 +881,8 @@ function buildEvCal(){
       var real=Math.abs(mv.monto);
       sub=fmt(real,'MXN');
       if(f.estimado&&Math.abs(real-f.monto)>1)sub+=' · est. '+fmt(f.monto,'MXN');
+    } else if(pagado){
+      sub='Pagado';   // marca manual: no hay monto que mostrar
     } else {
       sub=(f.estimado?'~':'')+fmt(f.monto,'MXN')+(f.estimado?' (est.)':'');
     }
@@ -917,6 +936,23 @@ function RCALq(){try{RCAL();}catch(e){console.error('RCAL:',e);}}
 // ¿Existe ya un gasto en el mes visible que corresponda a este gasto fijo?
 // Un movimiento cuenta si coincide el NOMBRE con la descripción, o bien categoría+subcategoría.
 // (Los nombres/subcategorías capturados a mano no siempre empatan; por eso el OR.)
+// Devuelve el movimiento que pagó esta tarjeta (mes visible, quincena kd), o null.
+function movDePagoTarjeta(t,kd){
+  var k=calKey('tarjeta',t.id,calY,calM,kd);
+  var m=E.movimientos.find(function(x){return x.calKey===k;});
+  if(m)return m;
+  // Fallback: abono registrado directo sobre la tarjeta (solo tiene sentido si no es quincenal)
+  if(!t.pago2){
+    m=E.movimientos.find(function(x){
+      if(!x.tarjeta||x.tarjeta!==t.id||x.tipo==='ajuste')return false;
+      var d=parseD(x.fecha);
+      return d.getMonth()===calM&&d.getFullYear()===calY&&x.monto>0;
+    });
+    if(m)return m;
+  }
+  return null;
+}
+
 // Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
 function movDeFijo(f){
   var nf=(f.nombre||'').trim().toLowerCase();
