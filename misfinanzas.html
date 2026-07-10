@@ -235,6 +235,7 @@ tr:nth-child(even){background:var(--surface)}
 <div id="mtr" class="modal-bg" onclick="if(event.target===this)CM('mtr')">
 <div class="modal">
   <div class="mh"><h2>Transferencia</h2><button class="mc" onclick="CM('mtr')">×</button></div>
+  <div class="field"><label>Fecha</label><input id="trf" type="date"/></div>
   <div class="field"><label>Origen</label><select id="trd"></select></div>
   <div class="field"><label>Destino</label><select id="tra"></select></div>
   <div class="field"><label>Monto a enviar</label><input id="trm" type="number" oninput="calcTC()"/></div>
@@ -478,6 +479,10 @@ function opsTR(conSaldo){
   return o;
 }
 function OT(){
+  var hd=new Date();
+  var enMesActual=(calY===hd.getFullYear()&&calM===hd.getMonth());
+  var dims=new Date(calY,calM+1,0).getDate();
+  document.getElementById('trf').value=enMesActual?hoy():(calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(Math.min(hd.getDate(),dims)).padStart(2,'0'));
   document.getElementById('trd').innerHTML=opsTR(true);
   document.getElementById('tra').innerHTML=opsTR(false);
   document.getElementById('trm').value='';
@@ -528,6 +533,12 @@ function getMonedaTR(val){
   if(val.startsWith('p_')){var p=E.prestamos.find(function(x){return x.id===parseInt(val.slice(2));});return p?p.moneda:'MXN';}
   return 'MXN';
 }
+// Para una tarjeta quincenal, elige el día de pago más cercano a la fecha del pago
+// dentro del mismo mes. En empate, gana la primera quincena.
+function quincenaCercana(t,dia){
+  if(!t.pago2)return null;
+  return Math.abs(dia-t.pago)<=Math.abs(dia-t.pago2)?t.pago:t.pago2;
+}
 function ajustarTR(val,delta){
   // delta negativo = origen pierde, delta positivo = destino gana
   // Para cuenta: saldo sube/baja directamente
@@ -547,21 +558,27 @@ try{
     moDest=mo*tc;
   }
   var nomOri=getNombreTR(dval),nomDest=getNombreTR(aval);
+  var fechaTR=document.getElementById('trf').value||hoy();
   // Crear el movimiento ANTES de tocar saldos, para que si algo más falla
   // después, el movimiento ya haya quedado registrado.
-  var movObj={id:uid(),fecha:hoy(),descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval};
+  var movObj={id:uid(),fecha:fechaTR,descripcion:'Transferencia: '+nomOri+' → '+nomDest,monto:-mo,montoDest:moDest,tipo:'transferencia',trOrigen:dval,trDestino:aval};
   ajustarTR(dval,-mo);   // origen pierde
   ajustarTR(aval,moDest); // destino gana
-  // Marcar pagado en calendario si destino es tarjeta o préstamo.
-  // En tarjetas quincenales no marcamos: no sabemos a cuál quincena corresponde.
+  // Marcar pagado en calendario si el destino es tarjeta o préstamo.
+  // Se usa el mes de la FECHA de la transferencia, no el de hoy.
   if(!E.calPagados)E.calPagados={};
-  var hd=new Date();
+  var fd=parseD(fechaTR),fy=fd.getFullYear(),fm=fd.getMonth(),fdia=fd.getDate();
   if(aval.startsWith('t_')){
     var tdid=parseInt(aval.slice(2));
     var td=E.tarjetas.find(function(x){return x.id===tdid;});
-    if(td&&!td.pago2){var kt=calKey('tarjeta',tdid,hd.getFullYear(),hd.getMonth(),null);E.calPagados[kt]=true;movObj.calKey=kt;}
+    if(td){
+      // Quincenales: se marca la quincena cuyo día de pago está más cerca de la fecha.
+      var kd=quincenaCercana(td,fdia);
+      var kt=calKey('tarjeta',tdid,fy,fm,kd);
+      E.calPagados[kt]=true;movObj.calKey=kt;
+    }
   }
-  if(aval.startsWith('p_')){var kp=calKey('prestamo',parseInt(aval.slice(2)),hd.getFullYear(),hd.getMonth(),null);E.calPagados[kp]=true;movObj.calKey=kp;}
+  if(aval.startsWith('p_')){var kp=calKey('prestamo',parseInt(aval.slice(2)),fy,fm,null);E.calPagados[kp]=true;movObj.calKey=kp;}
   E.movimientos.unshift(movObj);
   SAV();CM('mtr');RC();RT();RP();RM();RCALq();
 }catch(err){console.error('Error en HT (transferencia):',err);alert('Ocurrió un error al hacer la transferencia. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas la transferencia.');}
