@@ -438,11 +438,15 @@ async function enviarEnlace(){
       method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
       body:JSON.stringify({email:em,create_user:true})
     });
-    if(!r.ok)throw new Error('HTTP '+r.status);
+    var bodyTxt='';
+    try{bodyTxt=await r.text();}catch(_){}
+    if(!r.ok)throw new Error('HTTP '+r.status+' — '+bodyTxt);
     msg.innerHTML='<div class="mok">✅ Te enviamos un enlace a <b>'+em+'</b>. Ábrelo en este mismo dispositivo.</div>';
   }catch(err){
     console.error('otp:',err);
-    msg.innerHTML='<div class="merr">No se pudo enviar el enlace. Revisa tu conexión.</div>';
+    // Diagnóstico temporal: mostramos el error real en vez de un mensaje genérico,
+    // para saber si es límite de envíos, red bloqueada, o algo más.
+    msg.innerHTML='<div class="merr">No se pudo enviar el enlace.<br/><span style="font-size:11px;opacity:.8">'+String(err&&err.message||err)+'</span></div>';
   }
   btn.disabled=false;btn.textContent='Enviarme el enlace';
 }
