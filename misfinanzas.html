@@ -171,11 +171,23 @@ tr:nth-child(even){background:var(--surface)}
 <div id="login" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;padding:24px">
   <div style="width:100%;max-width:360px;text-align:center">
     <h1 style="font-size:26px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px">MisFinanzas <span style="color:var(--accent)">&bull;</span></h1>
-    <p style="color:var(--muted);font-size:13px;margin-bottom:26px">Entra con tu correo. Te enviamos un enlace &mdash; sin contrase&ntilde;as.</p>
-    <div class="field" style="text-align:left"><label>Correo</label><input id="lgEmail" type="email" autocomplete="email" placeholder="tu@correo.com"/></div>
-    <button id="lgBtn" class="btn bp bw" onclick="enviarEnlace()">Enviarme el enlace</button>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:22px" id="lgSub">Entra con tu correo y contrase&ntilde;a.</p>
+
+    <div id="lgModoPass">
+      <div class="field" style="text-align:left"><label>Correo</label><input id="lgEmail" type="email" autocomplete="email" placeholder="tu@correo.com"/></div>
+      <div class="field" style="text-align:left"><label>Contrase&ntilde;a</label><input id="lgPass" type="password" autocomplete="current-password" placeholder="••••••••"/></div>
+      <button id="lgBtn" class="btn bp bw" onclick="iniciarSesionPassword()">Iniciar sesión</button>
+      <p style="margin-top:14px"><a href="javascript:void(0)" onclick="cambiarModoLogin('enlace')" style="color:var(--blue);font-size:12px">¿Olvidaste tu contraseña? Usar enlace por correo</a></p>
+    </div>
+
+    <div id="lgModoEnlace" style="display:none">
+      <div class="field" style="text-align:left"><label>Correo</label><input id="lgEmail2" type="email" autocomplete="email" placeholder="tu@correo.com"/></div>
+      <button id="lgBtn2" class="btn bp bw" onclick="enviarEnlace()">Enviarme el enlace</button>
+      <p style="color:var(--subtle);font-size:11px;margin-top:14px;line-height:1.5">Abre el enlace en este mismo dispositivo y navegador. Caduca en 1 hora.<br/>Nota: los enlaces por correo tienen un límite de envíos por hora.</p>
+      <p style="margin-top:10px"><a href="javascript:void(0)" onclick="cambiarModoLogin('pass')" style="color:var(--blue);font-size:12px">← Usar correo y contraseña</a></p>
+    </div>
+
     <div id="lgMsg" style="margin-top:14px"></div>
-    <p style="color:var(--subtle);font-size:11px;margin-top:26px;line-height:1.5">Abre el enlace en este mismo dispositivo y navegador.<br/>El enlace caduca en 1 hora.</p>
   </div>
 </div>
 
@@ -188,6 +200,7 @@ tr:nth-child(even){background:var(--surface)}
     <div style="display:flex;gap:8px;align-items:center">
       <div class="pat-box"><p>Patrimonio</p><b id="pt">$0</b></div>
       <button class="btn bg bs" onclick="AM('mb')" style="font-size:18px;padding:8px 10px">💾</button>
+      <button class="btn bg bs" onclick="configurarPassword()" title="Configurar contraseña" style="font-size:16px;padding:8px 10px">🔑</button>
       <button class="btn bg bs" onclick="cerrarSesion()" title="Cerrar sesión" style="font-size:16px;padding:8px 10px">⏻</button>
     </div>
   </div>
@@ -451,11 +464,66 @@ async function enviarEnlace(){
   btn.disabled=false;btn.textContent='Enviarme el enlace';
 }
 
+async function iniciarSesionPassword(){
+  var em=(document.getElementById('lgEmail').value||'').trim();
+  var pw=document.getElementById('lgPass').value||'';
+  var msg=document.getElementById('lgMsg');
+  if(!em||em.indexOf('@')<0){msg.innerHTML='<div class="merr">Escribe un correo válido.</div>';return;}
+  if(!pw){msg.innerHTML='<div class="merr">Escribe tu contraseña.</div>';return;}
+  var btn=document.getElementById('lgBtn');btn.disabled=true;btn.textContent='Entrando…';
+  try{
+    var r=await fetch(SB_URL+'/auth/v1/token?grant_type=password',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({email:em,password:pw})
+    });
+    var j=await r.json();
+    if(!r.ok||!j.access_token)throw new Error(j.error_description||j.msg||('HTTP '+r.status));
+    _sess={access_token:j.access_token,refresh_token:j.refresh_token,expires_at:Date.now()+((j.expires_in||3600)*1000),user:j.user};
+    _guardarSess(_sess);
+    _ocultarLogin();
+    LOD(function(){RND('c');if(window.innerWidth>=768){var l=document.getElementById('nav-logo-desk');if(l)l.style.display='flex';}});
+  }catch(err){
+    console.error('login password:',err);
+    msg.innerHTML='<div class="merr">No se pudo iniciar sesión.<br/><span style="font-size:11px;opacity:.8">'+String(err&&err.message||err)+'</span></div>';
+    btn.disabled=false;btn.textContent='Iniciar sesión';
+  }
+}
+
+// Configura o cambia la contraseña de la cuenta YA AUTENTICADA (no manda ningún correo).
+// Úsalo una vez desde un dispositivo que ya tenga sesión, para poder entrar en otros
+// dispositivos con correo+contraseña sin depender del límite de envíos de magic links.
+async function configurarPassword(){
+  if(!_sess){alert('Primero inicia sesión.');return;}
+  var p1=prompt('Escribe tu nueva contraseña (mínimo 6 caracteres):');
+  if(p1===null)return;
+  if(p1.length<6){alert('Muy corta — usa al menos 6 caracteres.');return;}
+  var p2=prompt('Confírmala:');
+  if(p2===null)return;
+  if(p1!==p2){alert('No coinciden. Inténtalo de nuevo.');return;}
+  try{
+    var r=await _authFetch(SB_URL+'/auth/v1/user',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:p1})
+    });
+    if(!r.ok){var j=await r.json().catch(function(){return{};});throw new Error(j.msg||('HTTP '+r.status));}
+    alert('✅ Contraseña configurada. Ya puedes iniciar sesión con tu correo y esta contraseña en cualquier dispositivo, sin esperar ningún correo.');
+  }catch(err){
+    console.error('set password:',err);
+    alert('No se pudo configurar la contraseña: '+String(err&&err.message||err));
+  }
+}
+
 function cerrarSesion(){
   if(!confirm('¿Cerrar sesión en este dispositivo?'))return;
   _borrarSess();_sess=null;location.reload();
 }
 
+function cambiarModoLogin(m){
+  var p=document.getElementById('lgModoPass'), e=document.getElementById('lgModoEnlace'), msg=document.getElementById('lgMsg');
+  msg.innerHTML='';
+  if(m==='enlace'){p.style.display='none';e.style.display='';document.getElementById('lgEmail2').value=document.getElementById('lgEmail').value;}
+  else{e.style.display='none';p.style.display='';}
+}
 function _mostrarLogin(){document.getElementById('login').style.display='flex';document.getElementById('app').style.display='none';}
 function _ocultarLogin(){document.getElementById('login').style.display='none';document.getElementById('app').style.display='';}
 
