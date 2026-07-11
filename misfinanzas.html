@@ -193,6 +193,7 @@ tr:nth-child(even){background:var(--surface)}
     <div id="tr" class="tab"></div>
     <div id="tct" class="tab"></div>
     <div id="tpres" class="tab"></div>
+    <div id="tmeta" class="tab"></div>
   </div>
   <nav class="nav">
     <div class="nav-logo" style="display:none" id="nav-logo-desk">
@@ -207,6 +208,7 @@ tr:nth-child(even){background:var(--surface)}
     <button onclick="CT('r',this)"><span class="ic">📊</span>Reportes<span class="dot"></span></button>
     <button onclick="CT('ct',this)"><span class="ic">🏷️</span>Categorías<span class="dot"></span></button>
     <button onclick="CT('pres',this)"><span class="ic">💰</span>Presupuesto<span class="dot"></span></button>
+    <button onclick="CT('meta',this)"><span class="ic">🎯</span>Metas<span class="dot"></span></button>
   </nav>
 </div>
 
@@ -445,7 +447,7 @@ function CT(tab,btn){document.querySelectorAll('.tab').forEach(function(t){t.cla
 function AM(id){document.getElementById(id).classList.add('open');}
 function CM(id){document.getElementById(id).classList.remove('open');}
 function ATP(){var t=E.cuentas.reduce(function(s,c){return s+(c.moneda==='MXN'?c.saldo:c.saldo*(c.moneda==='USD'?17.5:19));},0);document.getElementById('pt').textContent=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',notation:'compact'}).format(t);}
-function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab==='p')RP();else if(tab==='m')RM();else if(tab==='ca')RCAL();else if(tab==='r')RR();else if(tab==='ct')RCT();else if(tab==='pres')RPRES();}catch(err){console.error('RND error:',err);}}
+function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab==='p')RP();else if(tab==='m')RM();else if(tab==='ca')RCAL();else if(tab==='r')RR();else if(tab==='ct')RCT();else if(tab==='pres')RPRES();else if(tab==='meta')RMETA();}catch(err){console.error('RND error:',err);}}
 
 // CUENTAS
 var TI={bancaria:'🏦',inversion:'📈',no_bancaria:'💵'};
@@ -1488,6 +1490,156 @@ function RPRES(){
 
 // -- GASTOS FIJOS --
 var editPFId=null;
+
+// ===================== METAS: tablero de seguimiento =====================
+// E.metas guarda: colchón objetivo, snapshot de saldo de las tarjetas objetivo
+// (para medir avance real), y avisos especiales con fecha (ej. pagos grandes puntuales).
+function ensureMetas(){
+  if(!E.metas)E.metas={};
+  if(E.metas.colchonObjetivo==null)E.metas.colchonObjetivo=20000;
+  if(!E.metas.tarjetasObjetivo){
+    var nombres=['Nova','Stori','Uala','Nu'];
+    E.metas.tarjetasObjetivo=E.tarjetas.filter(function(t){return nombres.indexOf(t.nombre.trim())>=0;}).map(function(t){return t.id;});
+  }
+  if(!E.metas.snapshotSaldos){
+    E.metas.snapshotFecha=hoy();
+    E.metas.snapshotSaldos={};
+    E.metas.tarjetasObjetivo.forEach(function(id){
+      var t=E.tarjetas.find(function(x){return x.id===id;});
+      if(t)E.metas.snapshotSaldos[id]=t.saldo;
+    });
+  }
+  if(!E.metas.avisos){
+    E.metas.avisos=[{id:uid(),fecha:'2026-08-28',monto:50209,texto:'Bupa Familia (atraso jun+jul) + agosto + último pago Eithan'}];
+  }
+}
+
+function sumaLiquidez(){
+  return E.cuentas.reduce(function(s,c){return s+(c.moneda==='MXN'?c.saldo:c.saldo*(c.moneda==='USD'?17.5:19));},0);
+}
+
+function fijarSnapshotTarjetas(){
+  if(!confirm('Esto actualiza el punto de partida de las tarjetas objetivo al saldo de HOY. Úsalo solo si quieres reiniciar la meta de avance.\n\n¿Continuar?'))return;
+  ensureMetas();
+  E.metas.snapshotFecha=hoy();
+  E.metas.snapshotSaldos={};
+  E.metas.tarjetasObjetivo.forEach(function(id){
+    var t=E.tarjetas.find(function(x){return x.id===id;});
+    if(t)E.metas.snapshotSaldos[id]=t.saldo;
+  });
+  SAV();RMETA();
+}
+
+function setColchonObjetivo(){
+  ensureMetas();
+  var v=prompt('¿Cuál es tu meta de colchón de liquidez?', E.metas.colchonObjetivo);
+  if(v===null)return;
+  var n=parseFloat(v);
+  if(!isFinite(n)||n<=0)return;
+  E.metas.colchonObjetivo=n;
+  SAV();RMETA();
+}
+
+function addAviso(){
+  ensureMetas();
+  var fecha=prompt('Fecha del aviso (AAAA-MM-DD):', hoy());
+  if(!fecha)return;
+  var monto=parseFloat(prompt('Monto aproximado:', '0'))||0;
+  var texto=prompt('¿Qué es este pago?','');
+  if(!texto)return;
+  E.metas.avisos.push({id:uid(),fecha:fecha,monto:monto,texto:texto});
+  SAV();RMETA();
+}
+function delAviso(id){
+  ensureMetas();
+  E.metas.avisos=E.metas.avisos.filter(function(a){return a.id!==id;});
+  SAV();RMETA();
+}
+
+function RMETA(){
+  ensureMetas();
+  var h='';
+
+  // --- Contador a enero 2027 (fin de Interkasa + beca 35%) ---
+  var hoyD=new Date(); var meta=new Date(2027,0,1);
+  var dias=Math.max(0,Math.ceil((meta-hoyD)/86400000));
+  h+='<div class="card" style="background:linear-gradient(135deg,#10B98122,#3B82F622);border:1px solid var(--accent)">';
+  h+='<p style="color:var(--muted);font-size:12px">El giro grande</p>';
+  h+='<p style="font-size:22px;font-weight:800;margin:4px 0">'+dias+' días para enero 2027</p>';
+  h+='<p style="color:var(--muted);font-size:12px">Termina Interkasa (-$13,000/mes) y la beca de Anáhuac sube a 35%. Alivio estimado: +$17,000 a +$23,000/mes.</p>';
+  h+='</div>';
+
+  // --- Avisos especiales (pagos grandes puntuales) ---
+  var avisosOrd=E.metas.avisos.slice().sort(function(a,b){return parseD(a.fecha)-parseD(b.fecha);});
+  if(avisosOrd.length){
+    h+='<h3 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">AVISOS ESPECIALES</h3>';
+    avisosOrd.forEach(function(a){
+      var d=parseD(a.fecha); var faltan=Math.ceil((d-hoyD)/86400000);
+      var urgente=faltan<=14&&faltan>=0;
+      h+='<div class="card" style="border-color:'+(urgente?'var(--red)':'var(--border)')+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+      h+='<div><p style="font-weight:700;font-size:14px">'+a.texto+'</p><p style="color:var(--muted);font-size:12px">'+fmtD(a.fecha)+(faltan>=0?' · en '+faltan+' días':' · venció')+'</p></div>';
+      h+='<div style="text-align:right"><p style="font-weight:800;color:'+(urgente?'var(--red)':'var(--text)')+'">'+fmt(a.monto)+'</p><button onclick="delAviso('+a.id+')" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer">Quitar</button></div>';
+      h+='</div></div>';
+    });
+  }
+  h+='<button class="btn bg bs" onclick="addAviso()" style="width:100%;margin-top:6px">+ Agregar aviso</button>';
+
+  // --- Colchón de liquidez ---
+  var liq=sumaLiquidez(); var obj=E.metas.colchonObjetivo;
+  var pctLiq=Math.min(100,Math.max(0,liq/obj*100));
+  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">COLCHÓN DE LIQUIDEZ</h3>';
+  h+='<div class="card">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline"><p style="font-weight:700">'+fmt(liq)+' <span style="color:var(--muted);font-weight:400;font-size:12px">de '+fmt(obj)+'</span></p><button onclick="setColchonObjetivo()" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer">Cambiar meta</button></div>';
+  h+='<div style="background:var(--border);border-radius:8px;height:10px;margin-top:8px;overflow:hidden"><div style="background:'+(pctLiq>=100?'var(--accent)':'var(--blue)')+';height:100%;width:'+pctLiq+'%"></div></div>';
+  h+='<p style="color:var(--muted);font-size:11px;margin-top:6px">'+pctLiq.toFixed(0)+'% de la meta</p>';
+  h+='</div>';
+
+  // --- Tarjetas objetivo (Nova, Stori, Uala, Nu) ---
+  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">TARJETAS OBJETIVO — LAS MÁS CARAS</h3>';
+  var totalBase=0,totalAhora=0;
+  E.metas.tarjetasObjetivo.forEach(function(id){
+    var t=E.tarjetas.find(function(x){return x.id===id;});
+    if(!t)return;
+    var base=E.metas.snapshotSaldos[id]!=null?E.metas.snapshotSaldos[id]:t.saldo;
+    totalBase+=base; totalAhora+=t.saldo;
+    var avance=base>0?Math.min(100,Math.max(0,(base-t.saldo)/base*100)):0;
+    var creció=t.saldo>base+0.01;
+    h+='<div class="card">';
+    h+='<div style="display:flex;justify-content:space-between"><p style="font-weight:700;font-size:14px">'+t.nombre+'</p><p style="font-weight:800;color:'+(creció?'var(--red)':'var(--accent)')+'">'+fmt(t.saldo)+'</p></div>';
+    h+='<div style="background:var(--border);border-radius:8px;height:8px;margin-top:8px;overflow:hidden"><div style="background:'+(creció?'var(--red)':'var(--accent)')+';height:100%;width:'+(creció?100:avance)+'%"></div></div>';
+    h+='<p style="color:var(--muted);font-size:11px;margin-top:5px">'+(creció?'Subió desde el punto de partida ('+fmt(base)+')':avance.toFixed(0)+'% pagado desde '+fmt(base))+'</p>';
+    h+='</div>';
+  });
+  if(totalBase>0){
+    var avanceTotal=Math.min(100,Math.max(0,(totalBase-totalAhora)/totalBase*100));
+    h+='<p style="color:var(--muted);font-size:12px;margin-top:4px">Conjunto: '+fmt(totalAhora)+' de '+fmt(totalBase)+' ('+avanceTotal.toFixed(0)+'% liquidado desde '+fmtD(E.metas.snapshotFecha)+')</p>';
+  }
+  h+='<button class="btn bg bs" onclick="fijarSnapshotTarjetas()" style="width:100%;margin-top:8px">↻ Reiniciar punto de partida</button>';
+
+  // --- Ritmo de gasto del mes ---
+  var y=hoyD.getFullYear(),m=hoyD.getMonth();
+  var diasTranscurridos=hoyD.getDate();
+  var diasTotales=new Date(y,m+1,0).getDate();
+  var gastoAcum=0,ingresoAcum=0;
+  E.movimientos.forEach(function(mv){
+    if(mv.tipo!=='gasto'&&mv.tipo!=='ingreso')return;
+    var d=parseD(mv.fecha); if(d.getFullYear()!==y||d.getMonth()!==m)return;
+    if(mv.tipo==='gasto')gastoAcum+=Math.abs(mv.monto); else ingresoAcum+=mv.monto;
+  });
+  var proyectado=diasTranscurridos>0?(gastoAcum/diasTranscurridos*diasTotales):0;
+  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">RITMO DE GASTO ESTE MES</h3>';
+  h+='<div class="card">';
+  h+='<p style="font-size:12px;color:var(--muted)">Gastado hasta hoy (día '+diasTranscurridos+' de '+diasTotales+')</p>';
+  h+='<p style="font-weight:800;font-size:18px">'+fmt(gastoAcum)+'</p>';
+  h+='<p style="font-size:12px;color:var(--muted);margin-top:8px">Al mismo ritmo, el mes cerraría en</p>';
+  h+='<p style="font-weight:800;font-size:18px;color:'+(proyectado>ingresoAcum?'var(--red)':'var(--accent)')+'">'+fmt(proyectado)+'</p>';
+  h+='<p style="font-size:11px;color:var(--subtle);margin-top:6px">Ingreso registrado hasta hoy: '+fmt(ingresoAcum)+'. El ingreso suele llegar en montos grandes puntuales, no parejo — usa esto como referencia, no como certeza.</p>';
+  h+='</div>';
+
+  document.getElementById('tmeta').innerHTML=h;
+}
+
 function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';AM('mpf');}
 function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF(f.subcategoria||'');document.getElementById('pftt').textContent='Editar gasto fijo';AM('mpf');}
 function ASCPF(val){var c=document.getElementById('pfcat').value,sc=document.getElementById('pfsc');sc.innerHTML='<option value="">Sin subcategoría</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});if(val)setSubcat(sc,val);}
