@@ -6,12 +6,6 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="MisFinanzas"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="theme-color" content="#0B1120"/>
-<link rel="icon" href="favicon.ico" sizes="any"/>
-<link rel="icon" type="image/png" href="favicon.png"/>
-<link rel="apple-touch-icon" href="apple-touch-icon.png"/>
-<link rel="manifest" href="manifest.json"/>
 <title>MisFinanzas</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -173,7 +167,19 @@ tr:nth-child(even){background:var(--surface)}
 </style>
 </head>
 <body>
-<div class="app">
+<!-- PANTALLA DE LOGIN -->
+<div id="login" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;padding:24px">
+  <div style="width:100%;max-width:360px;text-align:center">
+    <h1 style="font-size:26px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px">MisFinanzas <span style="color:var(--accent)">&bull;</span></h1>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:26px">Entra con tu correo. Te enviamos un enlace &mdash; sin contrase&ntilde;as.</p>
+    <div class="field" style="text-align:left"><label>Correo</label><input id="lgEmail" type="email" autocomplete="email" placeholder="tu@correo.com"/></div>
+    <button id="lgBtn" class="btn bp bw" onclick="enviarEnlace()">Enviarme el enlace</button>
+    <div id="lgMsg" style="margin-top:14px"></div>
+    <p style="color:var(--subtle);font-size:11px;margin-top:26px;line-height:1.5">Abre el enlace en este mismo dispositivo y navegador.<br/>El enlace caduca en 1 hora.</p>
+  </div>
+</div>
+
+<div class="app" id="app" style="display:none">
   <div class="header">
     <div>
       <h1>MisFinanzas <span>•</span></h1>
@@ -182,6 +188,7 @@ tr:nth-child(even){background:var(--surface)}
     <div style="display:flex;gap:8px;align-items:center">
       <div class="pat-box"><p>Patrimonio</p><b id="pt">$0</b></div>
       <button class="btn bg bs" onclick="AM('mb')" style="font-size:18px;padding:8px 10px">💾</button>
+      <button class="btn bg bs" onclick="cerrarSesion()" title="Cerrar sesión" style="font-size:16px;padding:8px 10px">⏻</button>
     </div>
   </div>
   <div class="content">
@@ -364,6 +371,90 @@ var SB_KEY='sb_publishable_4B8ppshvNFRQGOGjvBoJWw_CKBBE-ZC';
 // _cargaOK: solo permitimos escribir en la nube si la carga inicial fue exitosa.
 // Sin esto, un fallo de red al arrancar deja E vacío y el primer SAV() borra todo.
 var _cargaOK=false;
+// ===================== AUTENTICACIÓN (Supabase Auth · magic link) =====================
+// Sin sesión no se lee ni se escribe nada. La fila de datos se identifica por el UID
+// del usuario, y la política RLS de Supabase impide leer filas ajenas.
+var _sess=null;
+
+function _guardarSess(s){try{localStorage.setItem('mf_sess',JSON.stringify(s));}catch(_){}}
+function _leerSess(){try{return JSON.parse(localStorage.getItem('mf_sess'));}catch(_){return null;}}
+function _borrarSess(){try{localStorage.removeItem('mf_sess');}catch(_){}}
+
+// Tras el magic link, Supabase regresa los tokens en el fragmento (#) de la URL.
+function _tokensDeHash(){
+  if(!location.hash||location.hash.indexOf('access_token')<0)return null;
+  var pr=new URLSearchParams(location.hash.slice(1));
+  var at=pr.get('access_token');
+  if(!at)return null;
+  var s={access_token:at,refresh_token:pr.get('refresh_token')||'',expires_at:Date.now()+((parseInt(pr.get('expires_in'),10)||3600)*1000)};
+  history.replaceState(null,'',location.pathname+location.search);
+  return s;
+}
+
+async function _fetchUsuario(at){
+  var r=await fetch(SB_URL+'/auth/v1/user',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+at}});
+  if(!r.ok)throw new Error('user '+r.status);
+  return await r.json();
+}
+
+async function _refrescarSess(){
+  if(!_sess||!_sess.refresh_token)return false;
+  try{
+    var r=await fetch(SB_URL+'/auth/v1/token?grant_type=refresh_token',{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({refresh_token:_sess.refresh_token})
+    });
+    if(!r.ok)return false;
+    var j=await r.json();
+    if(!j.access_token)return false;
+    _sess={access_token:j.access_token,refresh_token:j.refresh_token||_sess.refresh_token,
+           expires_at:Date.now()+((j.expires_in||3600)*1000),user:j.user||_sess.user};
+    _guardarSess(_sess);return true;
+  }catch(_){return false;}
+}
+
+// fetch autenticado: refresca el token una vez si vence a media petición.
+async function _authFetch(url,opts,reintento){
+  if(!_sess)throw new Error('sin sesión');
+  if(_sess.expires_at&&_sess.expires_at<Date.now()+60000){await _refrescarSess();}
+  opts=opts||{};opts.headers=opts.headers||{};
+  opts.headers['apikey']=SB_KEY;
+  opts.headers['Authorization']='Bearer '+_sess.access_token;
+  var r=await fetch(url,opts);
+  if((r.status===401||r.status===403)&&!reintento){
+    if(await _refrescarSess())return _authFetch(url,opts,true);
+  }
+  return r;
+}
+
+async function enviarEnlace(){
+  var em=(document.getElementById('lgEmail').value||'').trim();
+  var msg=document.getElementById('lgMsg');
+  if(!em||em.indexOf('@')<0){msg.innerHTML='<div class="merr">Escribe un correo válido.</div>';return;}
+  var btn=document.getElementById('lgBtn');btn.disabled=true;btn.textContent='Enviando…';
+  try{
+    var redir=location.origin+location.pathname;
+    var r=await fetch(SB_URL+'/auth/v1/otp?redirect_to='+encodeURIComponent(redir),{
+      method:'POST',headers:{'Content-Type':'application/json','apikey':SB_KEY},
+      body:JSON.stringify({email:em,create_user:true})
+    });
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    msg.innerHTML='<div class="mok">✅ Te enviamos un enlace a <b>'+em+'</b>. Ábrelo en este mismo dispositivo.</div>';
+  }catch(err){
+    console.error('otp:',err);
+    msg.innerHTML='<div class="merr">No se pudo enviar el enlace. Revisa tu conexión.</div>';
+  }
+  btn.disabled=false;btn.textContent='Enviarme el enlace';
+}
+
+function cerrarSesion(){
+  if(!confirm('¿Cerrar sesión en este dispositivo?'))return;
+  _borrarSess();_sess=null;location.reload();
+}
+
+function _mostrarLogin(){document.getElementById('login').style.display='flex';document.getElementById('app').style.display='none';}
+function _ocultarLogin(){document.getElementById('login').style.display='none';document.getElementById('app').style.display='';}
+
 var _savQueue=Promise.resolve();
 var _savPendingCount=0;
 function _updSavIndicator(){
@@ -378,21 +469,26 @@ async function _doSave(){
     if(bb)bb.innerHTML='<div class="merr">🛑 Guardado bloqueado: no se cargaron tus datos desde la nube. Recarga la app con conexión.</div>';
     return;
   }
+  if(!_sess){console.warn('Guardado bloqueado: sin sesión.');return;}
   var snapshot=JSON.parse(JSON.stringify(E));
   try{
-    var resp=await fetch(SB_URL+'/rest/v1/datos',{
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos',{
       method:'POST',
-      headers:{'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:'state',contenido:snapshot,updated_at:new Date().toISOString()})
+      headers:{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:_sess.user.id,contenido:snapshot,updated_at:new Date().toISOString()})
     });
     if(!resp.ok)throw new Error('save failed: '+resp.status);
   }catch(err){
     console.error('Error guardando en Supabase:',err);
-    try{localStorage.setItem('mf_backup',JSON.stringify(snapshot));}catch(_){}
+    try{localStorage.setItem(_bkKey(),JSON.stringify(snapshot));}catch(_){}
     var b=document.getElementById('bkmsg');
     if(b)b.innerHTML='<div class="merr">⚠️ No se pudo guardar en la nube (se guardó copia local). Revisa tu conexión.</div>';
   }
 }
+
+// La copia local se guarda por usuario, para que dos cuentas en el mismo
+// dispositivo no se pisen los datos.
+function _bkKey(){return _sess&&_sess.user?'mf_backup_'+_sess.user.id:'mf_backup';}
 // Encola los guardados para que SIEMPRE se ejecuten en orden y nunca en paralelo.
 // Esto evita que un guardado viejo (más lento) sobrescriba uno más nuevo en Supabase.
 function SAV(){
@@ -407,15 +503,14 @@ function SAV(){
 
 async function LOD(cb){
   try{
-    var resp=await fetch(SB_URL+'/rest/v1/datos?id=eq.state&select=contenido',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-    });
+    if(!_sess)throw new Error('sin sesión');
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos?id=eq.'+encodeURIComponent(_sess.user.id)+'&select=contenido');
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var rows=await resp.json();
     if(rows&&rows.length>0&&rows[0].contenido)E=estado=rows[0].contenido;
     // Llegamos a la nube (con datos o vacía): es seguro escribir.
     _cargaOK=true;
-    try{localStorage.setItem('mf_backup',JSON.stringify(E));}catch(_){}
+    try{localStorage.setItem(_bkKey(),JSON.stringify(E));}catch(_){}
     cb();return;
   }catch(err){
     console.error('LOD falló:',err);
@@ -423,7 +518,7 @@ async function LOD(cb){
   // No pudimos leer la nube. NO habilitamos guardado.
   _cargaOK=false;
   var lb=null;
-  try{lb=localStorage.getItem('mf_backup');}catch(_){}
+  try{lb=localStorage.getItem(_bkKey());}catch(_){}
   if(lb){
     try{E=estado=JSON.parse(lb);}catch(_){}
     setTimeout(function(){alert('⚠️ No se pudo conectar a la nube.\n\nEstás viendo una COPIA LOCAL. Los cambios NO se guardarán.\n\nRecarga la app cuando tengas conexión.');},400);
@@ -1492,8 +1587,6 @@ function RPRES(){
 var editPFId=null;
 
 // ===================== METAS: tablero de seguimiento =====================
-// E.metas guarda: colchón objetivo, snapshot de saldo de las tarjetas objetivo
-// (para medir avance real), y avisos especiales con fecha (ej. pagos grandes puntuales).
 function ensureMetas(){
   if(!E.metas)E.metas={};
   if(E.metas.colchonObjetivo==null)E.metas.colchonObjetivo=20000;
@@ -1560,7 +1653,6 @@ function RMETA(){
   ensureMetas();
   var h='';
 
-  // --- Contador a enero 2027 (fin de Interkasa + beca 35%) ---
   var hoyD=new Date(); var meta=new Date(2027,0,1);
   var dias=Math.max(0,Math.ceil((meta-hoyD)/86400000));
   h+='<div class="card" style="background:linear-gradient(135deg,#10B98122,#3B82F622);border:1px solid var(--accent)">';
@@ -1569,7 +1661,6 @@ function RMETA(){
   h+='<p style="color:var(--muted);font-size:12px">Termina Interkasa (-$13,000/mes) y la beca de Anáhuac sube a 35%. Alivio estimado: +$17,000 a +$23,000/mes.</p>';
   h+='</div>';
 
-  // --- Avisos especiales (pagos grandes puntuales) ---
   var avisosOrd=E.metas.avisos.slice().sort(function(a,b){return parseD(a.fecha)-parseD(b.fecha);});
   if(avisosOrd.length){
     h+='<h3 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">AVISOS ESPECIALES</h3>';
@@ -1585,7 +1676,6 @@ function RMETA(){
   }
   h+='<button class="btn bg bs" onclick="addAviso()" style="width:100%;margin-top:6px">+ Agregar aviso</button>';
 
-  // --- Colchón de liquidez ---
   var liq=sumaLiquidez(); var obj=E.metas.colchonObjetivo;
   var pctLiq=Math.min(100,Math.max(0,liq/obj*100));
   h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">COLCHÓN DE LIQUIDEZ</h3>';
@@ -1595,7 +1685,6 @@ function RMETA(){
   h+='<p style="color:var(--muted);font-size:11px;margin-top:6px">'+pctLiq.toFixed(0)+'% de la meta</p>';
   h+='</div>';
 
-  // --- Tarjetas objetivo (Nova, Stori, Uala, Nu) ---
   h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">TARJETAS OBJETIVO — LAS MÁS CARAS</h3>';
   var totalBase=0,totalAhora=0;
   E.metas.tarjetasObjetivo.forEach(function(id){
@@ -1617,7 +1706,6 @@ function RMETA(){
   }
   h+='<button class="btn bg bs" onclick="fijarSnapshotTarjetas()" style="width:100%;margin-top:8px">↻ Reiniciar punto de partida</button>';
 
-  // --- Ritmo de gasto del mes ---
   var y=hoyD.getFullYear(),m=hoyD.getMonth();
   var diasTranscurridos=hoyD.getDate();
   var diasTotales=new Date(y,m+1,0).getDate();
@@ -1825,7 +1913,25 @@ function DelMov(){
 
 // INICIO
 document.getElementById('fh').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
-LOD(function(){RND('c');if(window.innerWidth>=768){var l=document.getElementById('nav-logo-desk');if(l)l.style.display='flex';}});
+async function ARRANCAR(){
+  var h=_tokensDeHash();
+  if(h){
+    try{ h.user=await _fetchUsuario(h.access_token); _sess=h; _guardarSess(_sess); }
+    catch(err){ console.error('token del enlace inválido:',err); _sess=null; _borrarSess(); }
+  } else {
+    _sess=_leerSess();
+    if(_sess&&_sess.expires_at&&_sess.expires_at<Date.now()+60000){
+      if(!await _refrescarSess()){_sess=null;_borrarSess();}
+    }
+  }
+  if(!_sess||!_sess.user||!_sess.user.id){_mostrarLogin();return;}
+  _ocultarLogin();
+  LOD(function(){
+    RND('c');
+    if(window.innerWidth>=768){var l=document.getElementById('nav-logo-desk');if(l)l.style.display='flex';}
+  });
+}
+ARRANCAR();
 </script>
 
 <!-- PANTALLA DETALLE CUENTA -->
