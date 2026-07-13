@@ -1250,10 +1250,14 @@ function movDePagoTarjeta(t,kd){
   var k=calKey('tarjeta',t.id,calY,calM,kd);
   var m=E.movimientos.find(function(x){return x.calKey===k;});
   if(m)return m;
-  // Fallback: abono registrado directo sobre la tarjeta (solo tiene sentido si no es quincenal)
+  // Fallback: abono registrado directo sobre la tarjeta (solo tiene sentido si no es quincenal).
+  // Excluye movimientos que YA quedaron ligados a otro mes/quincena vía calKey — si no,
+  // un pago atrasado (fechado hoy pero destinado a un mes anterior) se colaría también
+  // en el mes de hoy, marcándolo pagado sin que en realidad corresponda.
   if(!t.pago2){
     m=E.movimientos.find(function(x){
       if(!x.tarjeta||x.tarjeta!==t.id||x.tipo==='ajuste')return false;
+      if(x.calKey)return false;
       var d=parseD(x.fecha);
       return d.getMonth()===calM&&d.getFullYear()===calY&&x.monto>0;
     });
@@ -1263,10 +1267,14 @@ function movDePagoTarjeta(t,kd){
 }
 
 // Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
+// Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
+// Excluye movimientos con calKey (ya ligados explícitamente a otro mes) — evita que un
+// pago atrasado, fechado hoy pero destinado a un mes anterior, marque también el mes actual.
 function movDeFijo(f){
   var nf=(f.nombre||'').trim().toLowerCase();
   return E.movimientos.find(function(m){
     if(m.tipo!=='gasto')return false;
+    if(m.calKey)return false;
     var d=parseD(m.fecha);
     if(!d||d.getMonth()!==calM||d.getFullYear()!==calY)return false;
     var dm=(m.descripcion||'').trim().toLowerCase();
@@ -1375,10 +1383,19 @@ function PAGARCAL(tipo,id,monto,desc,dia,kd){
   CM('mcal');
   var btn=document.querySelector('.nav button:nth-child(4)');
   if(btn)CT('m',btn);
-  ONM();                              // ONM limpia _fijoPend, por eso se asigna después
+  ONM();                              // ONM limpia _fijoPend y pone la fecha en hoy()
   _fijoPend={id:id,y:calY,m:calM};
   document.getElementById('fmd').value=desc;
   document.getElementById('fmmo').value=monto||'';
+  // Si el mes que estás viendo en el calendario NO es el mes real de hoy (por ejemplo,
+  // estás poniéndote al día con un pago atrasado), prellenamos la fecha dentro de ESE
+  // mes en vez de dejar la de hoy. Así el pago no se "cuela" como si fuera del mes actual.
+  var hd=new Date();
+  if(!(calY===hd.getFullYear()&&calM===hd.getMonth())){
+    var dims=new Date(calY,calM+1,0).getDate();
+    var diaUsar=Math.min(dia||hd.getDate(),dims);
+    document.getElementById('fmf').value=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(diaUsar).padStart(2,'0');
+  }
 }
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
 
