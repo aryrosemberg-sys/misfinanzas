@@ -195,11 +195,11 @@ tr:nth-child(even){background:var(--surface)}
   <div class="header">
     <div>
       <h1>MisFinanzas <span>•</span></h1>
-      <p id="fh"></p>
+      <p id="fh"></p><p id="syncSt" style="color:var(--muted);font-size:11px;margin-top:2px"></p>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <div class="pat-box"><p>Patrimonio</p><b id="pt">$0</b></div>
-      <button class="btn bg bs" onclick="AM('mb')" style="font-size:18px;padding:8px 10px">💾</button>
+      <button class="btn bg bs" onclick="abrirRespaldo()" style="font-size:18px;padding:8px 10px">💾</button>
       <button class="btn bg bs" onclick="configurarPassword()" title="Configurar contraseña" style="font-size:16px;padding:8px 10px">🔑</button>
       <button class="btn bg bs" onclick="cerrarSesion()" title="Cerrar sesión" style="font-size:16px;padding:8px 10px">⏻</button>
     </div>
@@ -368,6 +368,18 @@ tr:nth-child(even){background:var(--surface)}
     <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Restaura tus datos desde un archivo de respaldo.</p>
     <label class="btn bp bw" style="display:block;text-align:center;cursor:pointer">Seleccionar archivo<input type="file" accept=".json" onchange="IMP(event)" style="display:none"/></label>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <p style="font-weight:700;font-size:14px;margin-bottom:6px">☁️ Sincronización con la nube</p>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Tus datos siempre se guardan primero en este dispositivo. La nube es para tenerlos también en tus otros dispositivos.</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <input id="chkSyncAuto" type="checkbox" style="width:18px;height:18px" onchange="toggleSyncAuto()"/>
+      <label for="chkSyncAuto" style="margin:0;cursor:pointer;font-size:13px">Sincronización automática con la nube</label>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg bs" onclick="sincronizarSubir()" style="flex:1">⬆️ Subir ahora</button>
+      <button class="btn bg bs" onclick="sincronizarBajar()" style="flex:1">⬇️ Traer de la nube</button>
+    </div>
+  </div>
   <div id="bkmsg"></div>
   <div class="tip"><p>💡 Recomendación</p><p>Exporta una vez al mes y guarda en Google Drive.</p></div>
 </div></div>
@@ -535,32 +547,142 @@ function _updSavIndicator(){
   b.style.display=_savPendingCount>0?'inline-block':'none';
 }
 async function _doSave(){
-  if(!_cargaOK){
-    console.warn('Guardado BLOQUEADO: la carga inicial no fue exitosa.');
-    var bb=document.getElementById('bkmsg');
-    if(bb)bb.innerHTML='<div class="merr">🛑 Guardado bloqueado: no se cargaron tus datos desde la nube. Recarga la app con conexión.</div>';
-    return;
-  }
   if(!_sess){console.warn('Guardado bloqueado: sin sesión.');return;}
+  var nowIso=new Date().toISOString();
   var snapshot=JSON.parse(JSON.stringify(E));
+
+  // 1. SIEMPRE guardamos en ESTE dispositivo primero. Instantáneo, sin internet.
+  try{
+    _guardarLocal(snapshot,nowIso);
+    _marcarEstadoSync('local',nowIso);
+  }catch(err){
+    console.error('No se pudo guardar localmente (¿almacenamiento lleno?):',err);
+    var bb=document.getElementById('bkmsg');
+    if(bb)bb.innerHTML='<div class="merr">🛑 No se pudo guardar en este dispositivo: '+String(err&&err.message||err)+'</div>';
+  }
+
+  // 2. Si la sincronización automática está apagada, no tocamos la nube.
+  if(!_syncAutoGet()){_marcarEstadoSync('sinauto',nowIso);return;}
+
+  // 3. Subimos a la nube en segundo plano (best-effort). Si falla, tus datos
+  //    YA están a salvo en este dispositivo — no perdiste nada.
   try{
     var resp=await _authFetch(SB_URL+'/rest/v1/datos',{
       method:'POST',
       headers:{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
-      body:JSON.stringify({id:_sess.user.id,contenido:snapshot,updated_at:new Date().toISOString()})
+      body:JSON.stringify({id:_sess.user.id,contenido:snapshot,updated_at:nowIso})
     });
     if(!resp.ok)throw new Error('save failed: '+resp.status);
+    _marcarEstadoSync('nube',nowIso);
   }catch(err){
-    console.error('Error guardando en Supabase:',err);
-    try{localStorage.setItem(_bkKey(),JSON.stringify(snapshot));}catch(_){}
-    var b=document.getElementById('bkmsg');
-    if(b)b.innerHTML='<div class="merr">⚠️ No se pudo guardar en la nube (se guardó copia local). Revisa tu conexión.</div>';
+    console.warn('No se pudo sincronizar con la nube ahora mismo (tus datos siguen guardados en este dispositivo):',err);
+    _marcarEstadoSync('pendiente',nowIso);
   }
 }
 
 // La copia local se guarda por usuario, para que dos cuentas en el mismo
 // dispositivo no se pisen los datos.
 function _bkKey(){return _sess&&_sess.user?'mf_backup_'+_sess.user.id:'mf_backup';}
+
+// ===================== ALMACENAMIENTO LOCAL COMO FUENTE PRINCIPAL =====================
+// El celular (o cualquier dispositivo) guarda sus datos aquí PRIMERO, siempre,
+// sin depender de internet. La nube (Supabase) es respaldo/sincronización,
+// no el único lugar donde vive la información.
+
+function _syncAutoGet(){
+  try{var v=localStorage.getItem('mf_syncAuto');return v===null?true:v==='1';}catch(_){return true;}
+}
+function _syncAutoSet(v){
+  try{localStorage.setItem('mf_syncAuto',v?'1':'0');}catch(_){}
+}
+
+function _guardarLocal(dataObj,ts){
+  localStorage.setItem(_bkKey(),JSON.stringify({data:dataObj,updated_at:ts}));
+}
+function _leerLocalConTs(){
+  var raw=null;
+  try{raw=localStorage.getItem(_bkKey());}catch(_){return null;}
+  if(!raw)return null;
+  try{
+    var parsed=JSON.parse(raw);
+    if(parsed&&parsed.data)return parsed;              // formato nuevo {data, updated_at}
+    return {data:parsed,updated_at:null};               // formato viejo (copia cruda de E)
+  }catch(_){return null;}
+}
+
+function _marcarEstadoSync(tipo,ts){
+  var el=document.getElementById('syncSt');
+  if(!el)return;
+  var hora=ts?new Date(ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'';
+  if(tipo==='local')el.innerHTML='📱 Guardado en este dispositivo · '+hora;
+  else if(tipo==='nube')el.innerHTML='☁️ Sincronizado · '+hora;
+  else if(tipo==='pendiente')el.innerHTML='📱 Guardado local · ☁️ pendiente de subir a la nube';
+  else if(tipo==='sinauto')el.innerHTML='📱 Guardado local · sincronización automática apagada';
+}
+
+// Revisa la nube sin bloquear la pantalla. Si hay algo más nuevo que lo local,
+// lo trae y refresca la vista. Nunca sobreescribe datos locales más recientes.
+async function _revisarNubeEnSegundoPlano(localTs){
+  if(!_syncAutoGet()||!_sess)return;
+  try{
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos?id=eq.'+encodeURIComponent(_sess.user.id)+'&select=contenido,updated_at');
+    if(!resp.ok)return;
+    var rows=await resp.json();
+    if(!rows||!rows.length||!rows[0].contenido)return;
+    var cloudTs=rows[0].updated_at;
+    if(!localTs||(cloudTs&&new Date(cloudTs)>new Date(localTs))){
+      E=estado=rows[0].contenido;
+      _guardarLocal(E,cloudTs);
+      _marcarEstadoSync('nube',cloudTs);
+      if(typeof RND==='function')RND(tabA);
+    }
+  }catch(err){
+    console.warn('Revisión en segundo plano falló (tus datos locales siguen intactos):',err);
+  }
+}
+
+// Sincronización manual: forzar subida o bajada, sin importar si el automático está activo.
+async function sincronizarSubir(){
+  if(!_sess){alert('Primero inicia sesión.');return;}
+  var nowIso=new Date().toISOString();
+  var snapshot=JSON.parse(JSON.stringify(E));
+  try{
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos',{
+      method:'POST',headers:{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:_sess.user.id,contenido:snapshot,updated_at:nowIso})
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    _guardarLocal(snapshot,nowIso);
+    _marcarEstadoSync('nube',nowIso);
+    alert('✅ Subido a la nube correctamente.');
+  }catch(err){
+    alert('No se pudo subir a la nube: '+String(err&&err.message||err));
+  }
+}
+async function sincronizarBajar(){
+  if(!_sess){alert('Primero inicia sesión.');return;}
+  if(!confirm('Esto reemplaza los datos de ESTE dispositivo con lo que haya en la nube.\n\nSi tienes cambios aquí que no se han subido, se van a perder.\n\n¿Continuar?'))return;
+  try{
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos?id=eq.'+encodeURIComponent(_sess.user.id)+'&select=contenido,updated_at');
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var rows=await resp.json();
+    if(!rows||!rows.length||!rows[0].contenido){alert('No hay datos en la nube todavía.');return;}
+    E=estado=rows[0].contenido;
+    _guardarLocal(E,rows[0].updated_at);
+    _marcarEstadoSync('nube',rows[0].updated_at);
+    RND(tabA);
+    alert('✅ Datos actualizados desde la nube.');
+  }catch(err){
+    alert('No se pudo bajar de la nube: '+String(err&&err.message||err));
+  }
+}
+function toggleSyncAuto(){
+  var v=!_syncAutoGet();
+  _syncAutoSet(v);
+  var cb=document.getElementById('chkSyncAuto'); if(cb)cb.checked=v;
+  if(v)_marcarEstadoSync('pendiente',new Date().toISOString());
+  else _marcarEstadoSync('sinauto',new Date().toISOString());
+}
 // Encola los guardados para que SIEMPRE se ejecuten en orden y nunca en paralelo.
 // Esto evita que un guardado viejo (más lento) sobrescriba uno más nuevo en Supabase.
 function SAV(){
@@ -574,29 +696,35 @@ function SAV(){
 }
 
 async function LOD(cb){
+  // 1. ¿Hay copia local en ESTE dispositivo? Si la hay, la usamos YA — instantáneo,
+  //    sin esperar red. Es la esencia de "todo vive primero en tu celular".
+  var local=_leerLocalConTs();
+  if(local&&local.data){
+    E=estado=local.data;
+    _cargaOK=true;
+    _marcarEstadoSync(local.updated_at?'local':'local',local.updated_at);
+    cb();
+    _revisarNubeEnSegundoPlano(local.updated_at);  // no bloquea, revisa si hay algo más nuevo
+    return;
+  }
+
+  // 2. No hay copia local (dispositivo nuevo). Aquí sí necesitamos internet, una vez.
   try{
     if(!_sess)throw new Error('sin sesión');
-    var resp=await _authFetch(SB_URL+'/rest/v1/datos?id=eq.'+encodeURIComponent(_sess.user.id)+'&select=contenido');
+    var resp=await _authFetch(SB_URL+'/rest/v1/datos?id=eq.'+encodeURIComponent(_sess.user.id)+'&select=contenido,updated_at');
     if(!resp.ok)throw new Error('HTTP '+resp.status);
     var rows=await resp.json();
-    if(rows&&rows.length>0&&rows[0].contenido)E=estado=rows[0].contenido;
-    // Llegamos a la nube (con datos o vacía): es seguro escribir.
+    var ts=new Date().toISOString();
+    if(rows&&rows.length>0&&rows[0].contenido){E=estado=rows[0].contenido;ts=rows[0].updated_at||ts;}
     _cargaOK=true;
-    try{localStorage.setItem(_bkKey(),JSON.stringify(E));}catch(_){}
+    _guardarLocal(E,ts);
+    _marcarEstadoSync('nube',ts);
     cb();return;
   }catch(err){
-    console.error('LOD falló:',err);
+    console.error('LOD falló (sin copia local ni acceso a la nube):',err);
   }
-  // No pudimos leer la nube. NO habilitamos guardado.
   _cargaOK=false;
-  var lb=null;
-  try{lb=localStorage.getItem(_bkKey());}catch(_){}
-  if(lb){
-    try{E=estado=JSON.parse(lb);}catch(_){}
-    setTimeout(function(){alert('⚠️ No se pudo conectar a la nube.\n\nEstás viendo una COPIA LOCAL. Los cambios NO se guardarán.\n\nRecarga la app cuando tengas conexión.');},400);
-  }else{
-    setTimeout(function(){alert('🛑 No se pudieron cargar tus datos y no hay copia local en este dispositivo.\n\nNO uses la app aquí hasta recuperar conexión.\n\n(El guardado está bloqueado para proteger tu información.)');},400);
-  }
+  setTimeout(function(){alert('🛑 No se pudieron cargar tus datos.\n\nEste dispositivo no tiene una copia guardada, y no se pudo conectar a la nube para traerla.\n\nConéctate a internet una vez para traer tus datos a este dispositivo. Después, ya no lo volverás a necesitar para abrir la app.');},400);
   cb();
 }
 
@@ -612,6 +740,7 @@ function DR(k,v){return '<div class="dr"><span>'+k+'</span><span>'+v+'</span></d
 
 function CT(tab,btn){document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});document.getElementById('t'+tab).classList.add('active');document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');tabA=tab;RND(tab);}
 function AM(id){document.getElementById(id).classList.add('open');}
+function abrirRespaldo(){var cb=document.getElementById('chkSyncAuto');if(cb)cb.checked=_syncAutoGet();AM('mb');}
 function CM(id){document.getElementById(id).classList.remove('open');}
 function ATP(){var t=E.cuentas.reduce(function(s,c){return s+(c.moneda==='MXN'?c.saldo:c.saldo*(c.moneda==='USD'?17.5:19));},0);document.getElementById('pt').textContent=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',notation:'compact'}).format(t);}
 function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab==='p')RP();else if(tab==='m')RM();else if(tab==='ca')RCAL();else if(tab==='r')RR();else if(tab==='ct')RCT();else if(tab==='pres')RPRES();else if(tab==='meta')RMETA();}catch(err){console.error('RND error:',err);}}
@@ -1993,7 +2122,15 @@ async function ARRANCAR(){
   } else {
     _sess=_leerSess();
     if(_sess&&_sess.expires_at&&_sess.expires_at<Date.now()+60000){
-      if(!await _refrescarSess()){_sess=null;_borrarSess();}
+      // Intentamos renovar el token, PERO si falla por falta de red (no porque la
+      // sesión sea inválida), seguimos usando la sesión guardada. Así el celular
+      // sigue funcionando con los datos locales aunque no haya internet en ese momento.
+      var okRef=await _refrescarSess();
+      if(!okRef&&navigator.onLine===false){
+        console.warn('No se pudo renovar el token por falta de conexión — se sigue usando la sesión guardada para acceso local.');
+      }else if(!okRef){
+        _sess=null;_borrarSess();
+      }
     }
   }
   if(!_sess||!_sess.user||!_sess.user.id){_mostrarLogin();return;}
@@ -2148,5 +2285,14 @@ ARRANCAR();
   <div id="mcal-body"></div>
 </div></div>
 
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(err){
+      console.error('No se pudo registrar el service worker:',err);
+    });
+  });
+}
+</script>
 </body>
 </html>
