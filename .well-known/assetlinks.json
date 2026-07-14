@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.aryrosemberg_sys.twa",
+        "sha256_cert_fingerprints": ["AE:F6:A4:6A:4B:BF:97:11:B0:F5:0E:6B:04:7D:34:62:81:9C:0E:F4:22:D9:5D:09:2B:3F:2A:E7:1C:A1:59:40"]
+      }
+    }]
