@@ -395,6 +395,11 @@ var _db=null,tabA='c',edC=null,edT=null,edP=null,tipoM='gasto',filtM={tipo:'todo
 var NM=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(e){console.error('SW registro falló:',e);});
+  });
+}
 var SB_URL='https://xlrokhkebhmxqmeqlzfa.supabase.co';
 var SB_KEY='sb_publishable_4B8ppshvNFRQGOGjvBoJWw_CKBBE-ZC';
 
