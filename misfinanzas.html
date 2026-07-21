@@ -1137,6 +1137,15 @@ function toggleCal(tipo,id,dia){
 // Escapa un valor para meterlo dentro de una cadena JS en un atributo onclick.
 function jsq(v){return String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
+// Marca un gasto fijo como "no aplica este mes" SOLO en el calendario (vía calPagados),
+// sin crear ningún movimiento ni tocar ningún saldo. Útil para meses de vacaciones,
+// pausas, becas, etc. Reutiliza toggleCal, que ya hace exactamente esto cuando el
+// item aún no está marcado como pagado.
+function OMITIRF(tipo,id,dia){
+  if(!confirm('¿Marcar como "no aplica este mes"?\n\nSolo se quita del calendario de este mes. No se crea ningún movimiento ni se toca ningún saldo. El próximo mes vuelve a aparecer normalmente.'))return;
+  toggleCal(tipo,id,dia);
+}
+
 // Nombres cortos de días de la semana. Convención: 0=Domingo…6=Sábado (igual que Date.getDay()).
 var NOMDIA={0:'Do',1:'Lu',2:'Ma',3:'Mi',4:'Ju',5:'Vi',6:'Sá'};
 function nombresDiasSemana(arr){
@@ -1218,7 +1227,7 @@ function buildEvCal(){
           sub=fmt(real,'MXN');
           if(Math.abs(real-montoOcurrencia)>1)sub+=' · est. '+fmt(montoOcurrencia,'MXN');
         } else if(pagado){
-          sub='Pagado';
+          sub='Omitido este mes';   // marcado sin movimiento (ej. botón "Omitir")
         } else {
           sub='~'+fmt(montoOcurrencia,'MXN')+' (de '+fmt(f.monto,'MXN')+'/semana)';
         }
@@ -1238,7 +1247,7 @@ function buildEvCal(){
       sub=fmt(real,'MXN');
       if(f.estimado&&Math.abs(real-f.monto)>1)sub+=' · est. '+fmt(f.monto,'MXN');
     } else if(pagado){
-      sub='Pagado';   // marca manual: no hay monto que mostrar
+      sub='Omitido este mes';   // marcado sin movimiento (ej. botón "Omitir")
     } else {
       sub=(f.estimado?'~':'')+fmt(f.monto,'MXN')+(f.estimado?' (est.)':'');
     }
@@ -1279,6 +1288,7 @@ function RCAL(){
         h+='<button onclick="toggleCal(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');RCAL()" style="background:var(--border);border:none;border-radius:8px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">Desmarcar</button>';
       } else {
         h+='<button onclick="PAGARCAL(\''+tipoBase+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:5px 10px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">\u2192 Pagar</button>';
+        if(tipoBase==='fijo')h+='<button onclick="OMITIRF(\'fijo\',\''+jsq(e.id)+'\','+(e.kd||0)+');RCAL()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 8px;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:4px">Omitir</button>';
       }
     }
     h+='</div>';
@@ -1355,6 +1365,7 @@ function ODCAL(dia){
         h+='<button onclick="toggleCal(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.kd||0)+');ODCAL('+dia+')" style="background:var(--border);border:none;border-radius:8px;padding:6px 12px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Desmarcar</button>';
       } else {
         h+='<button onclick="PAGARCAL(\''+tipoBase2+'\',\''+jsq(e.id)+'\','+(e.monto||0)+',\''+jsq(e.label)+'\','+e.dia+','+(e.kd||0)+')" style="background:var(--accent);border:none;border-radius:8px;padding:6px 12px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">\u2192 Registrar pago</button>';
+        if(tipoBase2==='fijo')h+='<button onclick="OMITIRF(\'fijo\',\''+jsq(e.id)+'\','+(e.kd||0)+');ODCAL('+dia+')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px">Omitir</button>';
       }
     }
     h+='</div>';
