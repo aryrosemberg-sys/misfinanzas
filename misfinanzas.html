@@ -1054,7 +1054,7 @@ E.movimientos.unshift(m);
 // Si venimos de "Pagar" un gasto fijo del calendario, marcarlo como pagado.
 if(_fijoPend){
   if(!E.calPagados)E.calPagados={};
-  var kf=calKey('fijo',_fijoPend.id,_fijoPend.y,_fijoPend.m,null);
+  var kf=calKey('fijo',_fijoPend.id,_fijoPend.y,_fijoPend.m,_fijoPend.kd);
   E.calPagados[kf]=true;m.calKey=kf;
   _fijoPend=null;
 }
@@ -1118,8 +1118,9 @@ function ELM(id){
 
 // CALENDARIO
 // calPagados: {'fijo_ID_YYYY-MM': true, 'tarjeta_ID_YYYY-MM': true}
-// dia: solo se usa en productos quincenales (tarjetas con pago2), para que cada
-// quincena tenga su propia marca. Sin dia, la llave es la de siempre (compatibilidad).
+// dia: solo se usa en productos quincenales (tarjetas con pago2) y en gastos fijos
+// semanales con varios días, para que cada ocurrencia tenga su propia marca.
+// Sin dia, la llave es la de siempre (compatibilidad).
 function calKey(tipo,id,y,m,dia){return tipo+'_'+id+'_'+y+'-'+(m<9?'0':'')+(m+1)+(dia?'_d'+dia:'');}
 function esPagadoCal(tipo,id,dia){return !!(E.calPagados&&E.calPagados[calKey(tipo,id,calY,calM,dia)]);}
 function toggleCal(tipo,id,dia){
@@ -1135,6 +1136,20 @@ function toggleCal(tipo,id,dia){
 }
 // Escapa un valor para meterlo dentro de una cadena JS en un atributo onclick.
 function jsq(v){return String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+// Nombres cortos de días de la semana. Convención: 0=Domingo…6=Sábado (igual que Date.getDay()).
+var NOMDIA={0:'Do',1:'Lu',2:'Ma',3:'Mi',4:'Ju',5:'Vi',6:'Sá'};
+function nombresDiasSemana(arr){
+  if(!arr||!arr.length)return '';
+  return arr.slice().sort(function(a,b){var oa=a===0?7:a,ob=b===0?7:b;return oa-ob;}).map(function(d){return NOMDIA[d];}).join(', ');
+}
+// Devuelve todos los días (1..N) del mes y año dados que caen en alguno de los
+// días de la semana indicados (0=Domingo…6=Sábado).
+function diasDelMesPorSemana(diasSemana,y,m){
+  var dims=new Date(y,m+1,0).getDate(),out=[];
+  for(var d=1;d<=dims;d++){if(diasSemana.indexOf(new Date(y,m,d).getDay())>=0)out.push(d);}
+  return out;
+}
 
 function buildEvCal(){
   var ev=[];
@@ -1184,7 +1199,34 @@ function buildEvCal(){
     var pagado=esPagadoCal('prestamo',p.id);
     ev.push({dia:Math.min(dia,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:null});
   });
-  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){if(!f.dia)return;var frec=f.frecuencia||'Mensual';var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;var fid=f.id||f.nombre;
+  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){
+    var frec=f.frecuencia||'Mensual';
+    var fid=f.id||f.nombre;
+    // Gastos fijos SEMANALES con días específicos (ej. Muchacha: Lun/Mié/Vie):
+    // generan UNA ocurrencia por cada día de la semana marcado, dentro del mes visible.
+    // El monto capturado es el TOTAL semanal, así que se reparte entre los días marcados.
+    if(frec==='Semanal'&&f.diasSemana&&f.diasSemana.length){
+      var montoOcurrencia=f.monto/f.diasSemana.length;
+      diasDelMesPorSemana(f.diasSemana,calY,calM).forEach(function(dia2){
+        var pagado=esPagadoCal('fijo',fid,dia2),auto=false;
+        var mv=movDeFijo(f,dia2);
+        if(!pagado&&mv){pagado=true;auto=true;}
+        if(pagado&&!mv){mv=E.movimientos.find(function(x){return x.calKey===calKey('fijo',fid,calY,calM,dia2);})||null;}
+        var sub;
+        if(pagado&&mv){
+          var real=Math.abs(mv.monto);
+          sub=fmt(real,'MXN');
+          if(Math.abs(real-montoOcurrencia)>1)sub+=' · est. '+fmt(montoOcurrencia,'MXN');
+        } else if(pagado){
+          sub='Pagado';
+        } else {
+          sub='~'+fmt(montoOcurrencia,'MXN')+' (de '+fmt(f.monto,'MXN')+'/semana)';
+        }
+        ev.push({dia:dia2,label:f.nombre,sub:sub,color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:fid,pagado:pagado,monto:montoOcurrencia,kd:dia2,auto:auto});
+      });
+      return;
+    }
+    if(!f.dia)return;var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;
     var pagado=esPagadoCal('fijo',fid),auto=false;
     var mv=movDeFijo(f);
     if(!pagado&&mv){pagado=true;auto=true;}
@@ -1272,16 +1314,19 @@ function movDePagoTarjeta(t,kd){
 }
 
 // Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
-// Devuelve el movimiento que corresponde a este gasto fijo en el mes visible, o null.
-// Excluye movimientos con calKey (ya ligados explícitamente a otro mes) — evita que un
-// pago atrasado, fechado hoy pero destinado a un mes anterior, marque también el mes actual.
-function movDeFijo(f){
+// diaEsperado (opcional): para gastos fijos semanales con varias ocurrencias al mes,
+// exige que el movimiento caiga exactamente en ese día del mes (no solo el mismo mes),
+// para no mezclar el pago del lunes con el del miércoles.
+// Excluye movimientos con calKey (ya ligados explícitamente a otro mes/día) — evita que un
+// pago atrasado, fechado hoy pero destinado a otro periodo, marque también el actual.
+function movDeFijo(f,diaEsperado){
   var nf=(f.nombre||'').trim().toLowerCase();
   return E.movimientos.find(function(m){
     if(m.tipo!=='gasto')return false;
     if(m.calKey)return false;
     var d=parseD(m.fecha);
     if(!d||d.getMonth()!==calM||d.getFullYear()!==calY)return false;
+    if(diaEsperado&&d.getDate()!==diaEsperado)return false;
     var dm=(m.descripcion||'').trim().toLowerCase();
     if(nf&&dm===nf)return true;
     if(f.categoria&&f.subcategoria&&m.categoria===f.categoria&&m.subcategoria===f.subcategoria)return true;
@@ -1376,7 +1421,7 @@ try{
   SAV();CM('mpag');RM();RC();RT();RP();RCALq();ATP();
 }catch(err){console.error('Error en GPAG (registrar pago):',err);alert('Ocurrió un error al registrar el pago. Revisa la consola (F12) y avisa a soporte. Si el saldo ya cambió pero no ves el movimiento, no repitas el pago.');}
 }
-// _fijoPend: recuerda qué gasto fijo (y de qué mes) se está pagando, para que GM()
+// _fijoPend: recuerda qué gasto fijo (y de qué mes / día) se está pagando, para que GM()
 // lo marque en el calendario al guardar el movimiento.
 var _fijoPend=null;
 function PAGARCAL(tipo,id,monto,desc,dia,kd){
@@ -1389,16 +1434,17 @@ function PAGARCAL(tipo,id,monto,desc,dia,kd){
   var btn=document.querySelector('.nav button:nth-child(4)');
   if(btn)CT('m',btn);
   ONM();                              // ONM limpia _fijoPend y pone la fecha en hoy()
-  _fijoPend={id:id,y:calY,m:calM};
+  _fijoPend={id:id,y:calY,m:calM,kd:kd||null};
   document.getElementById('fmd').value=desc;
   document.getElementById('fmmo').value=monto||'';
-  // Si el mes que estás viendo en el calendario NO es el mes real de hoy (por ejemplo,
-  // estás poniéndote al día con un pago atrasado), prellenamos la fecha dentro de ESE
-  // mes en vez de dejar la de hoy. Así el pago no se "cuela" como si fuera del mes actual.
+  // Fecha por defecto: si la ocurrencia (dia/kd) no es exactamente HOY, prellenamos esa
+  // fecha exacta en vez de dejar "hoy". Esto cubre tanto pagos atrasados en otro mes como
+  // gastos fijos semanales con varias ocurrencias (ej. pagar el miércoles desde el lunes).
   var hd=new Date();
-  if(!(calY===hd.getFullYear()&&calM===hd.getMonth())){
-    var dims=new Date(calY,calM+1,0).getDate();
-    var diaUsar=Math.min(dia||hd.getDate(),dims);
+  var dims=new Date(calY,calM+1,0).getDate();
+  var diaUsar=Math.min(dia||kd||hd.getDate(),dims);
+  var esHoyExacto=(calY===hd.getFullYear()&&calM===hd.getMonth()&&diaUsar===hd.getDate());
+  if(!esHoyExacto){
     document.getElementById('fmf').value=calY+'-'+String(calM+1).padStart(2,'0')+'-'+String(diaUsar).padStart(2,'0');
   }
 }
@@ -1764,6 +1810,7 @@ function RPRES(){
           h+='<div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--text)">'+f.nombre+'</div>';
           h+='<div style="color:var(--muted);font-size:11px;margin-top:2px">'+f.subcategoria+'  •  '+f.frecuencia;
           if(f.dia)h+='  •  Día '+f.dia+(alerta?' ⚠️':vencido?' 🔴':'');
+          if(f.diasSemana&&f.diasSemana.length)h+='  •  '+nombresDiasSemana(f.diasSemana);
           h+='</div></div>';
           h+='<div style="text-align:right"><div style="font-weight:800;font-size:15px;color:var(--text)">'+fmt(f.monto,'MXN')+'</div>';
           h+='<div style="color:var(--muted);font-size:10px">≈ '+fmt(f.monto*(FREC_FACTOR[f.frecuencia]||1),'MXN')+'/mes</div></div></div>';
@@ -1956,10 +2003,36 @@ function RMETA(){
   document.getElementById('tmeta').innerHTML=h;
 }
 
-function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';AM('mpf');}
-function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF(f.subcategoria||'');document.getElementById('pftt').textContent='Editar gasto fijo';AM('mpf');}
+function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=false;});var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';TFPF();AM('mpf');}
+function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=(f.diasSemana||[]).indexOf(d)>=0;});var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF(f.subcategoria||'');document.getElementById('pftt').textContent='Editar gasto fijo';TFPF();AM('mpf');}
 function ASCPF(val){var c=document.getElementById('pfcat').value,sc=document.getElementById('pfsc');sc.innerHTML='<option value="">Sin subcategoría</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});if(val)setSubcat(sc,val);}
-function GAF(){var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,di=parseInt(document.getElementById('pfdi').value)||null,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value,est=document.getElementById('pfest').checked;if(!n||!m)return;if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};if(editPFId){var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});if(i>=0)E.presupuesto.fijos[i]={id:editPFId,nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc,estimado:est};}else{E.presupuesto.fijos.push({id:uid(),nombre:n,monto:m,frecuencia:fr,dia:di,categoria:ca,subcategoria:sc,estimado:est});}SAV();CM('mpf');RPRES();RCALq();}
+// Muestra el selector de días de la semana (y oculta "día del mes") cuando la
+// frecuencia elegida es Semanal, y viceversa.
+function TFPF(){
+  var sem=document.getElementById('pffrec').value==='Semanal';
+  document.getElementById('pfdiw').style.display=sem?'none':'';
+  document.getElementById('pfdsw').style.display=sem?'':'none';
+}
+function GAF(){
+  var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value,est=document.getElementById('pfest').checked;
+  if(!n||!m)return;
+  if(!E.presupuesto)E.presupuesto={fijos:[],variables:[]};
+  var di=null,diasSemana=null;
+  if(fr==='Semanal'){
+    diasSemana=[0,1,2,3,4,5,6].filter(function(d){return document.getElementById('pfd'+d).checked;});
+    if(!diasSemana.length){alert('Selecciona al menos un día de la semana.');return;}
+  } else {
+    di=parseInt(document.getElementById('pfdi').value)||null;
+  }
+  var obj={nombre:n,monto:m,frecuencia:fr,dia:di,diasSemana:diasSemana,categoria:ca,subcategoria:sc,estimado:est};
+  if(editPFId){
+    var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});
+    if(i>=0){obj.id=editPFId;E.presupuesto.fijos[i]=obj;}
+  } else {
+    obj.id=uid();E.presupuesto.fijos.push(obj);
+  }
+  SAV();CM('mpf');RPRES();RCALq();
+}
 function DDF(id){if(!confirm('¿Eliminar este gasto fijo?'))return;E.presupuesto.fijos=E.presupuesto.fijos.filter(function(x){return x.id!==id;});SAV();RPRES();}
 
 // -- GASTOS VARIABLES --
@@ -2276,8 +2349,21 @@ ARRANCAR();
     <input id="pfest" type="checkbox" style="width:18px;height:18px;flex-shrink:0"/>
     <label for="pfest" style="margin:0;cursor:pointer">Monto variable (estimado) — luz, gas, agua…</label>
   </div>
-  <div class="field"><label>Frecuencia</label><select id="pffrec"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
-  <div class="field"><label>Día de pago (del mes)</label><input id="pfdi" type="number" min="1" max="31" placeholder="Ej: 15"/></div>
+  <div class="field"><label>Frecuencia</label><select id="pffrec" onchange="TFPF()"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
+  <div class="field" id="pfdiw"><label>Día de pago (del mes)</label><input id="pfdi" type="number" min="1" max="31" placeholder="Ej: 15"/></div>
+  <div class="field" id="pfdsw" style="display:none">
+    <label>Días de la semana</label>
+    <p style="color:var(--muted);font-size:11px;margin-bottom:8px">El monto de arriba es el total semanal — se reparte entre los días que marques.</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd1" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Lu</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd2" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Ma</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd3" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Mi</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd4" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Ju</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd5" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Vi</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd6" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Sá</span></label>
+      <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="pfd0" style="width:20px;height:20px"/><span style="font-size:11px;color:var(--subtle)">Do</span></label>
+    </div>
+  </div>
   <div class="field"><label>Categoría</label><select id="pfcat" onchange="ASCPF()"></select></div>
   <div class="field"><label>Subcategoría</label><select id="pfsc"></select></div>
   <button class="btn bp bw" onclick="GAF()">Guardar</button>
