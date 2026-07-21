@@ -1163,6 +1163,12 @@ function diasDelMesPorSemana(diasSemana,y,m){
 function buildEvCal(){
   var ev=[];
   var dimsMes=new Date(calY,calM+1,0).getDate();
+  // Límite global opcional: antes de esta fecha, tarjetas y gastos fijos no generan
+  // eventos de calendario (ruido de meses en los que ni siquiera usabas la app).
+  // Los préstamos NO se ven afectados por esto — ya tienen su propio arranque via proximoPago.
+  var iniLimite=E.calendarioInicio?parseD(E.calendarioInicio):null;
+  var antesDeInicio=iniLimite?((calY*12+calM)<(iniLimite.getFullYear()*12+iniLimite.getMonth())):false;
+  if(!antesDeInicio)
   E.tarjetas.forEach(function(t){
     var quinc=!!t.pago2;   // tarjeta/revolvente de pago quincenal
     if(t.corte)ev.push({dia:Math.min(t.corte,dimsMes),label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
@@ -1208,7 +1214,7 @@ function buildEvCal(){
     var pagado=esPagadoCal('prestamo',p.id);
     ev.push({dia:Math.min(dia,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:null});
   });
-  if(E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){
+  if(!antesDeInicio&&E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){
     var frec=f.frecuencia||'Mensual';
     var fid=f.id||f.nombre;
     // Gastos fijos SEMANALES con días específicos (ej. Muchacha: Lun/Mié/Vie):
@@ -1260,7 +1266,8 @@ function RCAL(){
   var hd=new Date(),hdia=hd.getDate(),hmes=hd.getMonth(),hany=hd.getFullYear();
   var ev=buildEvCal();
   var dims=new Date(calY,calM+1,0).getDate(),pd=new Date(calY,calM,1).getDay();
-  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><button class="btn bg bs" onclick="CN(-1)">\u2039</button><h3 style="font-weight:700">'+NM[calM]+' '+calY+'</h3><button class="btn bg bs" onclick="CN(1)">\u203a</button></div>';
+  var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><button class="btn bg bs" onclick="CN(-1)">\u2039</button><h3 style="font-weight:700">'+NM[calM]+' '+calY+'</h3><button class="btn bg bs" onclick="CN(1)">\u203a</button></div>';
+  h+='<div style="text-align:center;margin-bottom:14px"><button onclick="configurarInicioCalendario()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline">\u2699\ufe0f Calendario visible '+(E.calendarioInicio?('desde '+fmtD(E.calendarioInicio)):'sin límite')+'</button></div>';
   h+='<div class="cg">';
   ['Do','Lu','Ma','Mi','Ju','Vi','S\u00e1'].forEach(function(d){h+='<div class="cdn">'+d+'</div>';});
   for(var i=0;i<pd;i++)h+='<div></div>';
@@ -1460,6 +1467,20 @@ function PAGARCAL(tipo,id,monto,desc,dia,kd){
   }
 }
 function CN(d){calM+=d;if(calM>11){calM=0;calY++;}if(calM<0){calM=11;calY--;}RCAL();}
+
+// Fecha a partir de la cual el Calendario muestra pagos de tarjetas y gastos fijos.
+// Antes de esta fecha, el calendario queda vacío para esos dos tipos — así no hay
+// que ir "limpiando" año por año cada vez que alguien navega más atrás. Los préstamos
+// no se tocan: ya tienen su propio arranque individual vía proximoPago.
+function configurarInicioCalendario(){
+  var actual=E.calendarioInicio||'';
+  var v=prompt('¿Desde qué fecha quieres que el Calendario muestre pagos de tarjetas y gastos fijos?\n\nAntes de esa fecha, esos dos tipos ya no aparecerán como pendientes (los préstamos no se ven afectados).\n\nFormato AAAA-MM-DD. Deja vacío y acepta para quitar el límite.', actual);
+  if(v===null)return;
+  v=v.trim();
+  if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v)){alert('Formato inválido. Usa AAAA-MM-DD, por ejemplo 2026-01-01.');return;}
+  E.calendarioInicio=v||null;
+  SAV();RCAL();
+}
 
 // REPORTES
 var repTab='resumen', repFiltro={tipo:'mes',anio:new Date().getFullYear(),mes:new Date().getMonth(),anio2:new Date().getFullYear()-1,mes2:new Date().getMonth(),subcat:'todas',fechaIni:'',fechaFin:''};
