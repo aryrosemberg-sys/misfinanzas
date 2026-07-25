@@ -1588,14 +1588,31 @@ function renderBarChart(movsFilt){
     var x=pad+i*sw+sw/2;
     var ih=maxVal>0?(e.ing/maxVal)*(H-40):0;
     var gh=maxVal>0?(e.gst/maxVal)*(H-40):0;
-    h+='<rect x="'+(x-bw-2)+'" y="'+(H-20-ih)+'" width="'+bw+'" height="'+ih+'" fill="#10B981" rx="3" opacity="0.85"/>';
-    h+='<rect x="'+(x+2)+'" y="'+(H-20-gh)+'" width="'+bw+'" height="'+gh+'" fill="#EF4444" rx="3" opacity="0.85"/>';
-    h+='<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" fill="#64748B" font-size="9">'+NMC[e.m]+'</text>';
+    // Areas de clic invisibles (altura completa, mas faciles de tocar en movil)
+    h+='<rect x="'+(x-bw-2)+'" y="8" width="'+bw+'" height="'+(H-28)+'" fill="transparent" style="cursor:pointer" onclick="verDetalleBarra('+e.y+','+e.m+',&quot;ingresos&quot;)"><title>Ingresos '+NMC[e.m]+' '+e.y+': '+fmt(e.ing)+'</title></rect>';
+    h+='<rect x="'+(x+2)+'" y="8" width="'+bw+'" height="'+(H-28)+'" fill="transparent" style="cursor:pointer" onclick="verDetalleBarra('+e.y+','+e.m+',&quot;gastos&quot;)"><title>Gastos '+NMC[e.m]+' '+e.y+': '+fmt(e.gst)+'</title></rect>';
+    // Barras visibles (no interactivas, dejan pasar el clic a la capa de arriba)
+    h+='<rect x="'+(x-bw-2)+'" y="'+(H-20-ih)+'" width="'+bw+'" height="'+ih+'" fill="#10B981" rx="3" opacity="0.85" style="pointer-events:none"/>';
+    h+='<rect x="'+(x+2)+'" y="'+(H-20-gh)+'" width="'+bw+'" height="'+gh+'" fill="#EF4444" rx="3" opacity="0.85" style="pointer-events:none"/>';
+    h+='<text x="'+x+'" y="'+(H-4)+'" text-anchor="middle" fill="#64748B" font-size="9" style="pointer-events:none">'+NMC[e.m]+'</text>';
   });
   h+='</svg>';
   h+='<div style="display:flex;gap:16px;margin-top:10px"><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;background:#10B981;border-radius:2px"></div><span style="color:var(--subtle);font-size:12px">Ingresos</span></div><div style="display:flex;align-items:center;gap:6px"><div style="width:10px;height:10px;background:#EF4444;border-radius:2px"></div><span style="color:var(--subtle);font-size:12px">Gastos</span></div></div>';
+  h+='<p style="color:var(--muted);font-size:11px;margin-top:8px;text-align:center">Toca una barra para ver el detalle por categoria</p>';
   h+='</div>';
   return h;
+}
+
+// Al tocar una barra del grafico Ingresos vs Gastos, saltamos a la pestana de
+// detalle (Ingresos/Gastos) filtrada exactamente a ese mes y ano.
+function verDetalleBarra(y,m,tipo){
+  repFiltro.tipo='mes';
+  repFiltro.anio=y;
+  repFiltro.mes=m;
+  repTab=tipo;
+  RR();
+  var tr=document.getElementById('tr');
+  if(tr)tr.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function renderDetalle(movsFilt, tipo, totalAbs){
