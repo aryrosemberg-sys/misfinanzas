@@ -2,7 +2,7 @@
 // Estrategia: intenta red primero (para tener siempre la versión más nueva).
 // Si la red falla o se corta (celular con mala señal), sirve la última copia
 // buena guardada en el celular en vez de dejar la pantalla en blanco.
-const CACHE='misfinanzas-shell-v1';
+const CACHE='misfinanzas-shell-v2';
 const SHELL='./misfinanzas.html';
 
 self.addEventListener('install',function(e){
