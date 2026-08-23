@@ -1263,19 +1263,49 @@ document.getElementById('mtdb').innerHTML=h;AM('mtd');}
 
 // PRESTAMOS
 function GTB(p){var r=[],sr=p.monto,tM=p.tasa/100/12,n=p.plazo,pg=sr*tM/(1-Math.pow(1+tM,-n));for(var i=1;i<=n;i++){var it=sr*tM,cp=pg-it;sr-=cp;r.push({num:i,pago:pg,capital:cp,interes:it,saldo:Math.max(sr,0)});}return r;}
+function _esLiquidado(p){return (p.saldo||0)<=0.009;}
+var _verLiq=false;
+function toggleLiquidados(){_verLiq=!_verLiq;RP();}
+function _cardPrestamo(p){
+  var av=p.monto>0?((p.monto-p.saldo)/p.monto)*100:0;
+  var h='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><p style="font-weight:700;font-size:15px">'+p.nombre+'</p><p style="color:var(--muted);font-size:12px">'+p.otorgante+'</p></div><div style="text-align:right"><p style="color:var(--red);font-weight:800;font-size:17px">'+fmt(p.saldo,p.moneda)+'</p><p style="color:var(--muted);font-size:10px">saldo restante</p></div></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:12px">';
+  [['Monto',fmt(p.monto,p.moneda)],['Pago mens.',fmt(p.pagomensual,p.moneda)],['CAT',p.cat+'%'],['Tasa',p.tasa+'%'],['Plazo',p.plazo+'m'],['Pagados',p.pagado+'/'+p.plazo]].forEach(function(f){h+='<div style="background:var(--surface);border-radius:8px;padding:7px 9px"><p style="color:var(--muted);font-size:9px">'+f[0]+'</p><p style="color:var(--text);font-weight:700;font-size:12px">'+f[1]+'</p></div>';});
+  h+='</div><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted);font-size:11px">Avance</span><span style="color:var(--accent);font-size:11px;font-weight:700">'+av.toFixed(0)+'%</span></div>'+bar(p.monto-p.saldo,p.monto,'var(--accent)')+'</div>';
+  h+='<div class="fg" style="margin-top:10px">'+bdg('Próx: '+fmtD(p.proximoPago),'var(--amber)')+bdg('Inicio: '+fmtD(p.fechaInicio),'var(--accent)')+'</div>';
+  h+='<div class="fg" style="margin-top:12px"><button class="btn bg bs" onclick="abrirDetallePrestamo('+p.id+')">Ver detalle</button><button class="btn bg bs" onclick="EP('+p.id+')">Editar</button><button class="btn bd bs" onclick="ELP('+p.id+')">Eliminar</button></div></div>';
+  return h;
+}
+function _filaLiquidado(p){
+  var h='<div class="card" style="margin-bottom:8px;padding:12px 14px;opacity:.75"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px">';
+  h+='<div style="min-width:0"><p style="font-weight:700;font-size:13.5px">'+p.nombre+'</p><p style="color:var(--muted);font-size:11px">'+p.otorgante+' \u00b7 '+p.pagado+' de '+p.plazo+' pagos \u00b7 desde '+fmtD(p.fechaInicio)+'</p></div>';
+  h+='<div style="text-align:right;flex-shrink:0"><p style="color:var(--accent);font-weight:800;font-size:13px">'+fmt(p.monto,p.moneda)+'</p><p style="color:var(--muted);font-size:9px">monto original</p></div></div>';
+  h+='<div class="fg" style="margin-top:10px"><button class="btn bg bs" onclick="abrirDetallePrestamo('+p.id+')">Ver detalle</button><button class="btn bg bs" onclick="EP('+p.id+')">Editar</button><button class="btn bd bs" onclick="ELP('+p.id+')">Eliminar</button></div></div>';
+  return h;
+}
 function RP(){
-  var d=E.prestamos.reduce(function(s,p){return s+p.saldo;},0);
-  var h='<div class="row"><p style="color:var(--subtle);font-size:13px">Deuda total: <b style="color:var(--red)">'+fmt(d)+'</b></p><button class="btn bp bs" onclick="ONP()">+ Préstamo</button></div>';
-  if(!E.prestamos.length)h+='<div class="empty"><div style="font-size:44px">📝</div><p style="margin:12px 0">Aún no tienes préstamos</p><button class="btn bp" onclick="ONP()">Agregar mi primer préstamo</button></div>';
-  E.prestamos.forEach(function(p){
-    var av=p.monto>0?((p.monto-p.saldo)/p.monto)*100:0;
-    h+='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div><p style="font-weight:700;font-size:15px">'+p.nombre+'</p><p style="color:var(--muted);font-size:12px">'+p.otorgante+'</p></div><div style="text-align:right"><p style="color:var(--red);font-weight:800;font-size:17px">'+fmt(p.saldo,p.moneda)+'</p><p style="color:var(--muted);font-size:10px">saldo restante</p></div></div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:12px">';
-    [['Monto',fmt(p.monto,p.moneda)],['Pago mens.',fmt(p.pagomensual,p.moneda)],['CAT',p.cat+'%'],['Tasa',p.tasa+'%'],['Plazo',p.plazo+'m'],['Pagados',p.pagado+'/'+p.plazo]].forEach(function(f){h+='<div style="background:var(--surface);border-radius:8px;padding:7px 9px"><p style="color:var(--muted);font-size:9px">'+f[0]+'</p><p style="color:var(--text);font-weight:700;font-size:12px">'+f[1]+'</p></div>';});
-    h+='</div><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted);font-size:11px">Avance</span><span style="color:var(--accent);font-size:11px;font-weight:700">'+av.toFixed(0)+'%</span></div>'+bar(p.monto-p.saldo,p.monto,'var(--accent)')+'</div>';
-    h+='<div class="fg" style="margin-top:10px">'+bdg('Próx: '+fmtD(p.proximoPago),'var(--amber)')+bdg('Inicio: '+fmtD(p.fechaInicio),'var(--accent)')+'</div>';
-    h+='<div class="fg" style="margin-top:12px"><button class="btn bg bs" onclick="abrirDetallePrestamo('+p.id+')">Ver detalle</button><button class="btn bg bs" onclick="EP('+p.id+')">Editar</button><button class="btn bd bs" onclick="ELP('+p.id+')">Eliminar</button></div></div>';
-  });
+  var vig=E.prestamos.filter(function(p){return !_esLiquidado(p);});
+  var liq=E.prestamos.filter(_esLiquidado);
+  var d=vig.reduce(function(s,p){return s+p.saldo;},0);
+  var h='<div class="row"><p style="color:var(--subtle);font-size:13px">Deuda total: <b style="color:var(--red)">'+fmt(d)+'</b></p><button class="btn bp bs" onclick="ONP()">+ Pr\u00e9stamo</button></div>';
+  if(!E.prestamos.length)h+='<div class="empty"><div style="font-size:44px">\ud83d\udcdd</div><p style="margin:12px 0">A\u00fan no tienes pr\u00e9stamos</p><button class="btn bp" onclick="ONP()">Agregar mi primer pr\u00e9stamo</button></div>';
+  if(vig.length){
+    if(liq.length)h+='<p class="st" style="margin:4px 0 10px">PR\u00c9STAMOS VIGENTES \u00b7 '+vig.length+'</p>';
+    vig.forEach(function(p){h+=_cardPrestamo(p);});
+  } else if(E.prestamos.length){
+    h+='<div class="empty" style="padding:24px"><p style="color:var(--muted)">No tienes pr\u00e9stamos vigentes</p></div>';
+  }
+  if(liq.length){
+    h+='<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">';
+    h+='<button onclick="toggleLiquidados()" style="width:100%;background:none;border:none;padding:6px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.5px">';
+    h+='<span>LIQUIDADOS \u00b7 '+liq.length+'</span><span style="font-size:14px">'+(_verLiq?'\u25b4':'\u25be')+'</span></button>';
+    if(_verLiq){
+      h+='<div style="margin-top:10px">';
+      liq.forEach(function(p){h+=_filaLiquidado(p);});
+      h+='</div>';
+    }
+    h+='</div>';
+  }
   document.getElementById('tp').innerHTML=h;
 }
 function ONP(){edP=null;document.getElementById('mpt').textContent='Nuevo préstamo';['fpn','fpo','fpfi','fppp'].forEach(function(f){document.getElementById(f).value='';});['fpmo','fpsa','fpta','fpca','fppl','fppg','fppm'].forEach(function(f){document.getElementById(f).value='';});delete document.getElementById('fpsa').dataset.tocado;document.getElementById('fpm').value='MXN';document.querySelector('#mp .btn').textContent='Agregar préstamo';AM('mp');}
