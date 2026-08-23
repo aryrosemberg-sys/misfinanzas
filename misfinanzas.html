@@ -1504,12 +1504,12 @@ function buildEvCal(){
     if(!(p.saldo>0))return;
     var dia=p.diaPago||(p.proximoPago?parseD(p.proximoPago).getDate():0);
     if(!dia)return;
-    if(p.proximoPago){
-      var d0=parseD(p.proximoPago);
-      if(calY*12+calM < d0.getFullYear()*12+d0.getMonth())return;  // aún no arranca
-    }
+    var d0=p.proximoPago?parseD(p.proximoPago):null;
+    if(d0&&calY*12+calM < d0.getFullYear()*12+d0.getMonth())return;  // aún no arranca
     var diasPago=[dia];if(p.pago2&&p.pago2!=dia)diasPago.push(p.pago2);
     diasPago.sort(function(x,y){return x-y;}).forEach(function(dd){
+      // en el mes en que arranca, no mostrar fechas anteriores al primer pago
+      if(d0&&calY===d0.getFullYear()&&calM===d0.getMonth()&&dd<d0.getDate())return;
       var kd=p.pago2?dd:null;   // sin segunda fecha la llave queda igual que siempre
       var pagado=esPagadoCal('prestamo',p.id,kd);
       ev.push({dia:Math.min(dd,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:kd});
