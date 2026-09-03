@@ -1190,7 +1190,7 @@ try{
 }
 
 // TARJETAS
-function colorPorCAT(cat){return cat>=150?'var(--red)':cat>=80?'var(--coral)':'var(--blue)';}
+function colorPorCAT(cat){return cat>=150?'var(--red)':cat>=80?'var(--amber)':'var(--blue)';}
 function RT(){
   var orden=document.getElementById('t-orden')?document.getElementById('t-orden').value:'nombre';
   var deuda=E.tarjetas.reduce(function(s,t){return s+t.saldo;},0);
