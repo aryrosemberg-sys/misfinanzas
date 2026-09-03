@@ -1190,6 +1190,7 @@ try{
 }
 
 // TARJETAS
+function colorPorCAT(cat){return cat>=150?'var(--red)':cat>=80?'var(--coral)':'var(--blue)';}
 function RT(){
   var orden=document.getElementById('t-orden')?document.getElementById('t-orden').value:'nombre';
   var deuda=E.tarjetas.reduce(function(s,t){return s+t.saldo;},0);
@@ -1226,7 +1227,7 @@ function RT(){
     var disponible=t.limite-t.saldo;
     h+='<div class="card" style="background:linear-gradient(135deg,var(--card),#1e2d4a);margin-bottom:14px;position:relative;overflow:hidden">';
     h+='<div style="position:absolute;right:-20px;top:-20px;width:110px;height:110px;border-radius:50%;background:var(--blue)11"></div>';
-    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px"><div><p style="font-weight:700;font-size:16px">'+t.nombre+'</p><p style="color:var(--muted);font-size:12px">'+t.banco+' · '+t.numero+'</p></div>'+bdg(t.moneda,'var(--blue)')+'</div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px"><div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+colorPorCAT(t.cat)+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ICOSVG.tarjeta+'</span><div><p style="font-weight:700;font-size:16px">'+t.nombre+'</p><p style="color:var(--muted);font-size:12px">'+t.banco+' · '+t.numero+'</p></div></div>'+bdg(t.moneda,'var(--blue)')+'</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Deuda</p><p style="color:var(--red);font-weight:700;font-size:14px">'+fmt(t.saldo,t.moneda)+'</p></div>';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Disponible</p><p style="color:var(--accent);font-weight:700;font-size:14px">'+fmt(disponible,t.moneda)+'</p></div>';
