@@ -1542,7 +1542,7 @@ function buildEvCal(){
       });
       return;
     }
-    if(!f.dia)return;var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&calM%2===0)ok=true;else if(frec==='Trimestral'&&calM%3===0)ok=true;else if(frec==='Semestral'&&(calM===0||calM===6))ok=true;else if(frec==='Anual'&&calM===0)ok=true;if(!ok)return;
+    if(!f.dia)return;var mr=f.mesRef||0;var ok=false;if(frec==='Mensual')ok=true;else if(frec==='Bimestral'&&((calM-mr+12)%2===0))ok=true;else if(frec==='Trimestral'&&((calM-mr+12)%3===0))ok=true;else if(frec==='Semestral'&&((calM-mr+12)%6===0))ok=true;else if(frec==='Anual'&&calM===mr)ok=true;if(!ok)return;
     var pagado=esPagadoCal('fijo',fid),auto=false;
     var mv=movDeFijo(f);
     if(!pagado&&mv){pagado=true;auto=true;}
@@ -2354,15 +2354,21 @@ function RMETA(){
   document.getElementById('tmeta').innerHTML=h;
 }
 
-function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=false;});var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';TFPF();AM('mpf');}
-function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=(f.diasSemana||[]).indexOf(d)>=0;});var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF(f.subcategoria||'');document.getElementById('pftt').textContent='Editar gasto fijo';TFPF();AM('mpf');}
+function OAF(){editPFId=null;['pfn','pfm','pfdi'].forEach(function(x){document.getElementById(x).value='';});document.getElementById('pfest').checked=false;document.getElementById('pffrec').value='Mensual';[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=false;});var ca=document.getElementById('pfcat');llenarCats(ca);ASCPF();document.getElementById('pftt').textContent='Nuevo gasto fijo';TFPF();document.getElementById('pfmr').value='0';AM('mpf');}
+function EDF(id){var f=E.presupuesto.fijos.find(function(x){return x.id===id;});if(!f)return;editPFId=id;document.getElementById('pfn').value=f.nombre||'';document.getElementById('pfm').value=f.monto||'';document.getElementById('pffrec').value=f.frecuencia||'Mensual';document.getElementById('pfdi').value=f.dia||'';document.getElementById('pfest').checked=!!f.estimado;[0,1,2,3,4,5,6].forEach(function(d){document.getElementById('pfd'+d).checked=(f.diasSemana||[]).indexOf(d)>=0;});var ca=document.getElementById('pfcat');llenarCats(ca,f.categoria);ASCPF(f.subcategoria||'');document.getElementById('pftt').textContent='Editar gasto fijo';TFPF();document.getElementById('pfmr').value=String(f.mesRef||0);AM('mpf');}
 function ASCPF(val){var c=document.getElementById('pfcat').value,sc=document.getElementById('pfsc');sc.innerHTML='<option value="">Sin subcategoría</option>';(E.categorias[c]||[]).forEach(function(s){sc.innerHTML+='<option>'+s+'</option>';});if(val)setSubcat(sc,val);}
 // Muestra el selector de días de la semana (y oculta "día del mes") cuando la
 // frecuencia elegida es Semanal, y viceversa.
 function TFPF(){
-  var sem=document.getElementById('pffrec').value==='Semanal';
+  var fr=document.getElementById('pffrec').value,sem=fr==='Semanal';
   document.getElementById('pfdiw').style.display=sem?'none':'';
   document.getElementById('pfdsw').style.display=sem?'':'none';
+  var conMesRef=(fr==='Bimestral'||fr==='Trimestral'||fr==='Semestral'||fr==='Anual');
+  document.getElementById('pfmrw').style.display=conMesRef?'':'none';
+  if(conMesRef){
+    var sel=document.getElementById('pfmr');
+    if(!sel.options.length){NM.forEach(function(nm,i){sel.innerHTML+='<option value="'+i+'">'+nm+'</option>';});}
+  }
 }
 function GAF(){
   var n=document.getElementById('pfn').value.trim(),m=parseFloat(document.getElementById('pfm').value)||0,fr=document.getElementById('pffrec').value,ca=document.getElementById('pfcat').value,sc=document.getElementById('pfsc').value,est=document.getElementById('pfest').checked;
@@ -2375,7 +2381,8 @@ function GAF(){
   } else {
     di=parseInt(document.getElementById('pfdi').value)||null;
   }
-  var obj={nombre:n,monto:m,frecuencia:fr,dia:di,diasSemana:diasSemana,categoria:ca,subcategoria:sc,estimado:est};
+  var mr=(fr==='Bimestral'||fr==='Trimestral'||fr==='Semestral'||fr==='Anual')?(parseInt(document.getElementById('pfmr').value)||0):undefined;
+  var obj={nombre:n,monto:m,frecuencia:fr,dia:di,diasSemana:diasSemana,categoria:ca,subcategoria:sc,estimado:est,mesRef:mr};
   if(editPFId){
     var i=E.presupuesto.fijos.findIndex(function(x){return x.id===editPFId;});
     if(i>=0){obj.id=editPFId;E.presupuesto.fijos[i]=obj;}
@@ -2703,6 +2710,11 @@ ARRANCAR();
   </div>
   <div class="field"><label>Frecuencia</label><select id="pffrec" onchange="TFPF()"><option>Semanal</option><option>Quincenal</option><option selected>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Semestral</option><option>Anual</option></select></div>
   <div class="field" id="pfdiw"><label>Día de pago (del mes)</label><input id="pfdi" type="number" min="1" max="31" placeholder="Ej: 15"/></div>
+  <div class="field" id="pfmrw" style="display:none">
+    <label>Mes en que cae (o el primero, si se repite)</label>
+    <select id="pfmr"></select>
+    <p style="color:var(--muted);font-size:11px;margin-top:4px">Ej: Anual en febrero, o Semestral empezando en marzo (marzo y septiembre).</p>
+  </div>
   <div class="field" id="pfdsw" style="display:none">
     <label>Días de la semana</label>
     <p style="color:var(--muted);font-size:11px;margin-bottom:8px">El monto de arriba es el total semanal — se reparte entre los días que marques.</p>
@@ -2750,14 +2762,5 @@ ARRANCAR();
   <div id="mcal-body"></div>
 </div></div>
 
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('sw.js').catch(function(err){
-      console.error('No se pudo registrar el service worker:',err);
-    });
-  });
-}
-</script>
 </body>
 </html>
