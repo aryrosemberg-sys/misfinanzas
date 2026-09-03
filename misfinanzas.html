@@ -1598,16 +1598,20 @@ function RCAL(){
     evD.slice(0,3).forEach(function(e){h+='<div class="cdot" style="background:'+(e.pagado?'var(--accent)':e.color)+'"></div>';});
     h+='</div>';
   }
+  h+='</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">';
+  [['Servicios','var(--blue)'],['Tarjetas','var(--coral)'],['Préstamos','var(--red)'],['Salud','var(--teal)'],['Educación','var(--purple)'],['Membresías','var(--pink)']].forEach(function(c){
+    h+='<span style="font-size:10px;padding:4px 10px;border-radius:20px;background:'+c[1]+';color:#fff;font-weight:700">'+c[0]+'</span>';
+  });
   h+='</div><p class="st">Fechas importantes</p>';
   var es=ev.slice().sort(function(a,b){return a.dia-b.dia;});
   if(!es.length)h+='<p style="color:var(--muted);text-align:center;padding:20px">Sin eventos este mes</p>';
   es.forEach(function(e){
     var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago'||e.tipo==='prestamo';
     var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
-    h+='<div class="ei" style="border-left:4px solid '+(e.pagado?'var(--accent)':e.color)+';opacity:'+(e.pagado?'.7':'1')+';align-items:center">';
-    h+='<span style="width:32px;height:32px;border-radius:9px;background:'+(e.pagado?'var(--accent)':e.color)+'22;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">'+(e.icon||'📌')+'</span>';
-    h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:15px;min-width:22px;text-align:center;flex-shrink:0">'+e.dia+'</span>';
-    h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:13px">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
+    h+='<div class="ei" style="border-left:4px solid '+(e.pagado?'var(--accent)':e.color)+';opacity:'+(e.pagado?'.7':'1')+';align-items:center;padding:13px 15px;border-radius:14px;gap:12px">';
+    h+='<span style="width:42px;height:42px;border-radius:13px;background:'+(e.pagado?'var(--accent)':e.color)+';display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0">'+(e.icon||'📌')+'</span>';
+    h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:15px;min-width:20px;text-align:center;flex-shrink:0">'+e.dia+'</span>';
+    h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:14px;font-weight:600">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:12px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
     if(esPagable){
       if(e.pagado&&e.auto){
         h+='<span title="Detectado por un movimiento de este mes" style="color:var(--muted);font-size:10px;flex-shrink:0;margin-left:6px;white-space:nowrap">vía movimiento</span>';
