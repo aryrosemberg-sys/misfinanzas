@@ -1042,6 +1042,7 @@ function RND(tab){try{ATP();if(tab==='c')RC();else if(tab==='t')RT();else if(tab
 
 // CUENTAS
 var TI={bancaria:'🏦',inversion:'📈',no_bancaria:'💵'};
+var TIC={bancaria:{i:'banco',c:'var(--blue)'},inversion:{i:'subiendo',c:'var(--accent)'},no_bancaria:{i:'billete',c:'var(--amber)'}};
 var TL={bancaria:'Cuenta bancaria',inversion:'Cuenta inversión',no_bancaria:'No bancaria / Efectivo'};
 function RC(){
   var tot=E.cuentas.reduce(function(s,c){return s+(c.moneda==='MXN'?c.saldo:c.saldo*(c.moneda==='USD'?17.5:19));},0);
@@ -1049,8 +1050,9 @@ function RC(){
   h+='<div style="display:flex;gap:8px"><button class="btn bg bs" onclick="OT()">⇄ Transferir</button><button class="btn bp bs" onclick="ONC()">+ Cuenta</button></div></div>';
   if(!E.cuentas.length)h+='<div class="empty"><div style="font-size:44px">🏦</div><p style="margin:12px 0">Aún no tienes cuentas</p><button class="btn bp" onclick="ONC()">Agregar mi primera cuenta</button></div>';
   E.cuentas.forEach(function(c){
+    var tc=TIC[c.tipo]||TIC.bancaria;
     h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">';
-    h+='<div style="display:flex;gap:10px;align-items:center"><span style="font-size:26px">'+TI[c.tipo]+'</span><div><p style="font-weight:700;font-size:15px">'+c.nombre+'</p><p style="color:var(--muted);font-size:12px">'+c.banco+(c.numero?' · '+c.numero:'')+'</p></div></div>';
+    h+='<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+tc.c+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ICOSVG[tc.i]+'</span><div><p style="font-weight:700;font-size:15px">'+c.nombre+'</p><p style="color:var(--muted);font-size:12px">'+c.banco+(c.numero?' · '+c.numero:'')+'</p></div></div>';
     h+='<div style="text-align:right"><p style="color:var(--accent);font-weight:800;font-size:19px">'+fmt(c.saldo,c.moneda)+'</p>'+bdg(c.moneda,'var(--blue)')+'</div></div>';
     h+='<div class="fg" style="margin-top:10px"><button class="btn bg bs" onclick="abrirDetalleCuenta('+c.id+')">Ver detalle</button><button class="btn bg bs" onclick="EC('+c.id+')">Editar</button><button class="btn bd bs" onclick="ELC('+c.id+')">Eliminar</button></div></div>';
   });
@@ -1494,7 +1496,10 @@ var ICOSVG={
   gorro:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11v5c0 1 3 3 6 3s6-2 6-3v-5"/></svg>',
   estrella:'<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.7 7-6.3-3.9-6.3 3.9 1.7-7L2 9.2l7.1-.6z"/></svg>',
   calendario:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
-  pin:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 0 0-14 0c0 4.5 7 11 7 11z"/></svg>'
+  pin:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 21s7-6.5 7-11a7 7 0 0 0-14 0c0 4.5 7 11 7 11z"/></svg>',
+  banco:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M9 10v11M15 10v11"/></svg>',
+  subiendo:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>',
+  billete:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 6v.01M18 18v.01"/></svg>'
 };
 function catIcon(categoria,subcategoria){
   if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return ICOSVG.llave;
