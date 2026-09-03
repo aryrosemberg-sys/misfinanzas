@@ -1515,7 +1515,15 @@ var ICOSVG={
   reloj:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
   auto:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-5A2 2 0 0 1 6.4 6.5h11.2a2 2 0 0 1 1.9 1.5L21 13"/><rect x="2" y="13" width="20" height="6" rx="1.5"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>',
   tenedor:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v8M4 2v5a2 2 0 0 0 4 0V2M6 10v12M18 2c-2 2-2 5-2 8h4c0-3 0-6-2-8zM18 10v12"/></svg>',
-  nino:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>'
+  nino:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>',
+  tv:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>',
+  celular:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>',
+  telefono:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>',
+  rayo:'<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>',
+  martillo:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5l6 6L17 13l-6-6zM3 21l7-7M11 10L4 17l3 3 7-7"/></svg>',
+  gas:'<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none"><path d="M12 2c1 3-2 4-2 7a2 2 0 0 0 4 0c1 1 2 2.5 2 4.5a6 6 0 1 1-12 0C4 9 8 8 12 2z"/></svg>',
+  grifo:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10V6a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v1h2v3h-9v9"/><path d="M6 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>',
+  persona:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg>'
 };
 function catColor(categoria,subcategoria){
   if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return 'var(--blue)';
@@ -1529,7 +1537,17 @@ function catColor(categoria,subcategoria){
   return 'var(--muted)';
 }
 function catIcon(categoria,subcategoria){
-  if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return ICOSVG.llave;
+  if(categoria==='Streaming')return ICOSVG.tv;
+  if(categoria==='Celular')return ICOSVG.celular;
+  if(categoria==='Hogar'){
+    if(subcategoria==='Luz')return ICOSVG.rayo;
+    if(subcategoria==='Gas')return ICOSVG.gas;
+    if(subcategoria==='Agua')return ICOSVG.grifo;
+    if(subcategoria==='Teléfono')return ICOSVG.telefono;
+    if(subcategoria==='Muchacha')return ICOSVG.persona;
+    if(subcategoria==='Cuota mantenimiento')return ICOSVG.martillo;
+    return ICOSVG.llave;
+  }
   if(categoria==='Educación')return ICOSVG.gorro;
   if(categoria==='Salud')return ICOSVG.corazon;
   if(categoria==='Membresías')return ICOSVG.estrella;
