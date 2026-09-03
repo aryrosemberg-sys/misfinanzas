@@ -2234,13 +2234,13 @@ function RPRES(){
           var dias=dv?Math.ceil((dv-hoy2)/(1000*60*60*24)):null;
           var alerta=dias!==null&&dias<=3&&dias>=0;
           var vencido=dias!==null&&dias<0;
-          h+='<div class="card" style="margin-bottom:8px;padding:13px 14px">';
+          h+='<div class="card" style="margin-bottom:8px;padding:13px 14px'+(alerta?';border-color:var(--amber)':vencido?';border-color:var(--red)':'')+'">';
           h+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
-          h+='<div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--text)">'+f.nombre+'</div>';
+          h+='<div style="display:flex;gap:11px;align-items:flex-start;flex:1"><span style="width:36px;height:36px;border-radius:10px;background:'+catColor(f.categoria,f.subcategoria)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+catIcon(f.categoria,f.subcategoria)+'</span><div style="flex:1"><div style="font-weight:700;font-size:14px;color:var(--text)">'+f.nombre+'</div>';
           h+='<div style="color:var(--muted);font-size:11px;margin-top:2px">'+f.subcategoria+'  •  '+f.frecuencia;
           if(f.dia)h+='  •  Día '+f.dia+(alerta?' ⚠️':vencido?' 🔴':'');
           if(f.diasSemana&&f.diasSemana.length)h+='  •  '+nombresDiasSemana(f.diasSemana);
-          h+='</div></div>';
+          h+='</div></div></div>';
           h+='<div style="text-align:right"><div style="font-weight:800;font-size:15px;color:var(--text)">'+fmt(f.monto,'MXN')+'</div>';
           h+='<div style="color:var(--muted);font-size:10px">≈ '+fmt(f.monto*(FREC_FACTOR[f.frecuencia]||1),'MXN')+'/mes</div></div></div>';
           h+='<div style="display:flex;gap:8px;margin-top:10px">';
