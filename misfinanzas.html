@@ -16,7 +16,7 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --bg:#0B1120;--surface:#131C2E;--card:#1A2540;--border:#243050;
-  --accent:#10B981;--blue:#3B82F6;--purple:#8B5CF6;--red:#EF4444;--amber:#F59E0B;
+  --accent:#10B981;--blue:#3B82F6;--purple:#8B5CF6;--red:#EF4444;--amber:#F59E0B;--coral:#F97316;--teal:#14B8A6;--pink:#EC4899;
   --text:#F1F5F9;--muted:#64748B;--subtle:#94A3B8;
 }
 body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;overscroll-behavior:none}
@@ -1457,6 +1457,24 @@ function diasDelMesPorSemana(diasSemana,y,m){
   return out;
 }
 
+// Color por categoría para el Calendario (Servicios/Educación/Salud/Membresías/Préstamos).
+// Tarjetas y Préstamos como listas no pasan por aquí — tienen su color fijo abajo.
+function catColor(categoria,subcategoria){
+  if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return 'var(--blue)';
+  if(categoria==='Educación')return 'var(--purple)';
+  if(categoria==='Salud')return 'var(--teal)';
+  if(categoria==='Membresías')return 'var(--pink)';
+  if(categoria==='Intereses y comisiones')return subcategoria==='Anualidad Amex'?'var(--pink)':'var(--red)';
+  return 'var(--muted)';
+}
+function catIcon(categoria,subcategoria){
+  if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return '🔧';
+  if(categoria==='Educación')return '🎓';
+  if(categoria==='Salud')return '❤️';
+  if(categoria==='Membresías')return '⭐';
+  if(categoria==='Intereses y comisiones')return subcategoria==='Anualidad Amex'?'⭐':'📉';
+  return '📌';
+}
 function buildEvCal(){
   var ev=[];
   var dimsMes=new Date(calY,calM+1,0).getDate();
@@ -1468,7 +1486,7 @@ function buildEvCal(){
   if(!antesDeInicio)
   E.tarjetas.forEach(function(t){
     var quinc=!!t.pago2;   // tarjeta/revolvente de pago quincenal
-    if(t.corte)ev.push({dia:Math.min(t.corte,dimsMes),label:'Corte: '+t.nombre,color:'var(--amber)',tipo:'tarjeta_corte',id:t.id,pagado:false});
+    if(t.corte)ev.push({dia:Math.min(t.corte,dimsMes),label:'Corte: '+t.nombre,color:'var(--amber)',icon:'📅',tipo:'tarjeta_corte',id:t.id,pagado:false});
     var dias=quinc?[t.pago,t.pago2].sort(function(a,b){return a-b;}):[t.pago];
     dias.forEach(function(dp,idx){
       if(!dp)return;
@@ -1496,7 +1514,7 @@ function buildEvCal(){
         sub=(t.minVar?'~Mín ':'Mín ')+fmt(t.minimo,t.moneda)+(t.minVar?' (est.)':'');
       }
       // Los mínimos variables no prellenan monto: hay que capturar el del estado de cuenta.
-      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:sub,color:pagado?'var(--accent)':'var(--red)',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:(t.minVar?0:t.minimo),kd:kd,auto:auto});
+      ev.push({dia:Math.min(dp,dimsMes),label:'Pago: '+t.nombre+suf,sub:sub,color:pagado?'var(--accent)':'var(--coral)',icon:'💳',tipo:'tarjeta_pago',id:t.id,pagado:pagado,monto:(t.minVar?0:t.minimo),kd:kd,auto:auto});
     });
   });
   // Préstamos: se repiten TODOS los meses mientras haya saldo, a partir de proximoPago.
@@ -1512,7 +1530,7 @@ function buildEvCal(){
       if(d0&&calY===d0.getFullYear()&&calM===d0.getMonth()&&dd<d0.getDate())return;
       var kd=p.pago2?dd:null;   // sin segunda fecha la llave queda igual que siempre
       var pagado=esPagadoCal('prestamo',p.id,kd);
-      ev.push({dia:Math.min(dd,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--purple)',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:kd});
+      ev.push({dia:Math.min(dd,dimsMes),label:'Pago: '+p.nombre,sub:fmt(p.pagomensual,p.moneda),color:pagado?'var(--accent)':'var(--red)',icon:'📉',tipo:'prestamo',id:p.id,pagado:pagado,monto:p.pagomensual,kd:kd});
     });
   });
   if(!antesDeInicio&&E.presupuesto&&E.presupuesto.fijos){E.presupuesto.fijos.forEach(function(f){
@@ -1538,7 +1556,7 @@ function buildEvCal(){
         } else {
           sub='~'+fmt(montoOcurrencia,'MXN')+' (de '+fmt(f.monto,'MXN')+'/semana)';
         }
-        ev.push({dia:dia2,label:f.nombre,sub:sub,color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:fid,pagado:pagado,monto:montoOcurrencia,kd:dia2,auto:auto});
+        ev.push({dia:dia2,label:f.nombre,sub:sub,color:pagado?'var(--accent)':catColor(f.categoria,f.subcategoria),icon:catIcon(f.categoria,f.subcategoria),tipo:'fijo',id:fid,pagado:pagado,monto:montoOcurrencia,kd:dia2,auto:auto});
       });
       return;
     }
@@ -1559,7 +1577,7 @@ function buildEvCal(){
       sub=(f.estimado?'~':'')+fmt(f.monto,'MXN')+(f.estimado?' (est.)':'');
     }
     // Los estimados no prellenan monto: hay que capturar el recibo real.
-    ev.push({dia:Math.min(f.dia,dimsMes),label:f.nombre,sub:sub,color:pagado?'var(--accent)':'var(--blue)',tipo:'fijo',id:fid,pagado:pagado,monto:(f.estimado?0:f.monto),kd:null,auto:auto});});}
+    ev.push({dia:Math.min(f.dia,dimsMes),label:f.nombre,sub:sub,color:pagado?'var(--accent)':catColor(f.categoria,f.subcategoria),icon:catIcon(f.categoria,f.subcategoria),tipo:'fijo',id:fid,pagado:pagado,monto:(f.estimado?0:f.monto),kd:null,auto:auto});});}
   return ev;
 }
 
@@ -1587,7 +1605,8 @@ function RCAL(){
     var esPagable=e.tipo==='fijo'||e.tipo==='tarjeta_pago'||e.tipo==='prestamo';
     var tipoBase=e.tipo==='tarjeta_pago'?'tarjeta':e.tipo;
     h+='<div class="ei" style="border-left:4px solid '+(e.pagado?'var(--accent)':e.color)+';opacity:'+(e.pagado?'.7':'1')+';align-items:center">';
-    h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:17px;min-width:26px;text-align:center">'+e.dia+'</span>';
+    h+='<span style="width:32px;height:32px;border-radius:9px;background:'+(e.pagado?'var(--accent)':e.color)+'22;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">'+(e.icon||'📌')+'</span>';
+    h+='<span style="color:'+(e.pagado?'var(--accent)':e.color)+';font-weight:800;font-size:15px;min-width:22px;text-align:center;flex-shrink:0">'+e.dia+'</span>';
     h+='<div style="flex:1;padding-left:4px"><div style="color:var(--text);font-size:13px">'+(e.pagado?'\u2705 ':'')+e.label+'</div>'+(e.sub?'<div style="color:var(--muted);font-size:11px;margin-top:2px">'+e.sub+'</div>':'')+'</div>';
     if(esPagable){
       if(e.pagado&&e.auto){
