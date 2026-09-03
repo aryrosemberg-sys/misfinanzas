@@ -1052,7 +1052,7 @@ function RC(){
   E.cuentas.forEach(function(c){
     var tc=TIC[c.tipo]||TIC.bancaria;
     h+='<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">';
-    h+='<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+tc.c+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ICOSVG[tc.i]+'</span><div><p style="font-weight:700;font-size:15px">'+c.nombre+'</p><p style="color:var(--muted);font-size:12px">'+c.banco+(c.numero?' · '+c.numero:'')+'</p></div></div>';
+    h+='<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+marcaColor(c.nombre)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+ICOSVG[tc.i]+'</span><div><p style="font-weight:700;font-size:15px">'+c.nombre+'</p><p style="color:var(--muted);font-size:12px">'+c.banco+(c.numero?' · '+c.numero:'')+'</p></div></div>';
     h+='<div style="text-align:right"><p style="color:var(--accent);font-weight:800;font-size:19px">'+fmt(c.saldo,c.moneda)+'</p>'+bdg(c.moneda,'var(--blue)')+'</div></div>';
     h+='<div class="fg" style="margin-top:10px"><button class="btn bg bs" onclick="abrirDetalleCuenta('+c.id+')">Ver detalle</button><button class="btn bg bs" onclick="EC('+c.id+')">Editar</button><button class="btn bd bs" onclick="ELC('+c.id+')">Eliminar</button></div></div>';
   });
@@ -1191,6 +1191,25 @@ try{
 
 // TARJETAS
 function colorPorCAT(cat){return cat>=150?'var(--red)':cat>=80?'var(--amber)':'var(--blue)';}
+function marcaColor(nombre){
+  var n=(nombre||'').toLowerCase();
+  if(n.indexOf('hsbc')>=0)return '#DB0011';
+  if(n.indexOf('nu')>=0)return '#820AD1';
+  if(n.indexOf('rappi')>=0)return '#FF441F';
+  if(n.indexOf('didi')>=0)return '#FF6900';
+  if(n.indexOf('amex')>=0)return '#006FCF';
+  if(n.indexOf('hyundai')>=0)return '#002C5F';
+  if(n.indexOf(' mg')>=0||n.indexOf('mg5')>=0)return '#C4171F';
+  if(n.indexOf('klar')>=0)return '#27272A';
+  if(n.indexOf('stori')>=0)return '#6E7F39';
+  if(n.indexOf('uala')>=0||n.indexOf('ualá')>=0)return '#E4032E';
+  if(n.indexOf('plata')>=0)return '#EA580C';
+  if(n.indexOf('nova')>=0)return 'linear-gradient(135deg,#0080FF,#A3E635)';
+  if(n.indexOf('air')>=0)return '#0EA5E9';
+  if(n.indexOf('ark')>=0)return '#166534';
+  if(n.indexOf('facebank')>=0)return '#7DD3FC';
+  return 'var(--muted)';
+}
 function RT(){
   var orden=document.getElementById('t-orden')?document.getElementById('t-orden').value:'nombre';
   var deuda=E.tarjetas.reduce(function(s,t){return s+t.saldo;},0);
@@ -1227,13 +1246,13 @@ function RT(){
     var disponible=t.limite-t.saldo;
     h+='<div class="card" style="background:linear-gradient(135deg,var(--card),#1e2d4a);margin-bottom:14px;position:relative;overflow:hidden">';
     h+='<div style="position:absolute;right:-20px;top:-20px;width:110px;height:110px;border-radius:50%;background:var(--blue)11"></div>';
-    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px"><div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+colorPorCAT(t.cat)+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ICOSVG.tarjeta+'</span><div><p style="font-weight:700;font-size:16px">'+t.nombre+'</p><p style="color:var(--muted);font-size:12px">'+t.banco+' · '+t.numero+'</p></div></div>'+bdg(t.moneda,'var(--blue)')+'</div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px"><div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+marcaColor(t.nombre)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+ICOSVG.tarjeta+'</span><div><p style="font-weight:700;font-size:16px">'+t.nombre+'</p><p style="color:var(--muted);font-size:12px">'+t.banco+' · '+t.numero+'</p></div></div>'+bdg(t.moneda,'var(--blue)')+'</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Deuda</p><p style="color:var(--red);font-weight:700;font-size:14px">'+fmt(t.saldo,t.moneda)+'</p></div>';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Disponible</p><p style="color:var(--accent);font-weight:700;font-size:14px">'+fmt(disponible,t.moneda)+'</p></div>';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Límite</p><p style="color:var(--blue);font-weight:700;font-size:14px">'+fmt(t.limite,t.moneda)+'</p></div>';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Pago mín.</p><p style="color:var(--amber);font-weight:700;font-size:14px">'+fmt(t.minimo,t.moneda)+'</p></div>';
-    h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">CAT</p><p style="color:var(--purple);font-weight:700;font-size:14px">'+t.cat+'%</p></div>';
+    h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">CAT</p><p style="color:'+colorPorCAT(t.cat)+';font-weight:700;font-size:14px">'+t.cat+'%</p></div>';
     h+='<div style="background:var(--surface);border-radius:10px;padding:9px 11px"><p style="color:var(--muted);font-size:10px">Vence</p><p style="color:var(--text);font-weight:700;font-size:13px">'+t.vencimiento+'</p></div>';
     h+='</div>';
     h+='<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted);font-size:11px">Uso del crédito</span><span style="color:'+(uso>80?'var(--red)':uso>60?'var(--amber)':'var(--accent)')+';font-size:11px;font-weight:700">'+uso.toFixed(0)+'%</span></div>'+bar(t.saldo,t.limite)+'</div>';
@@ -1291,9 +1310,9 @@ var _verLiq=false;
 function toggleLiquidados(){_verLiq=!_verLiq;RP();}
 function _cardPrestamo(p){
   var av=p.monto>0?((p.monto-p.saldo)/p.monto)*100:0;
-  var h='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+colorPorCAT(p.cat)+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ICOSVG.bajando+'</span><div><p style="font-weight:700;font-size:15px">'+p.nombre+'</p><p style="color:var(--muted);font-size:12px">'+p.otorgante+'</p></div></div><div style="text-align:right"><p style="color:var(--red);font-weight:800;font-size:17px">'+fmt(p.saldo,p.moneda)+'</p><p style="color:var(--muted);font-size:10px">saldo restante</p></div></div>';
+  var h='<div class="card" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:13px;background:'+marcaColor(p.nombre)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+ICOSVG.bajando+'</span><div><p style="font-weight:700;font-size:15px">'+p.nombre+'</p><p style="color:var(--muted);font-size:12px">'+p.otorgante+'</p></div></div><div style="text-align:right"><p style="color:var(--red);font-weight:800;font-size:17px">'+fmt(p.saldo,p.moneda)+'</p><p style="color:var(--muted);font-size:10px">saldo restante</p></div></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:12px">';
-  [['Monto',fmt(p.monto,p.moneda)],['Pago mens.',fmt(p.pagomensual,p.moneda)],['CAT',p.cat+'%'],['Tasa',p.tasa+'%'],['Plazo',p.plazo+'m'],['Pagados',p.pagado+'/'+p.plazo]].forEach(function(f){h+='<div style="background:var(--surface);border-radius:8px;padding:7px 9px"><p style="color:var(--muted);font-size:9px">'+f[0]+'</p><p style="color:var(--text);font-weight:700;font-size:12px">'+f[1]+'</p></div>';});
+  [['Monto',fmt(p.monto,p.moneda)],['Pago mens.',fmt(p.pagomensual,p.moneda)],['CAT',p.cat+'%'],['Tasa',p.tasa+'%'],['Plazo',p.plazo+'m'],['Pagados',p.pagado+'/'+p.plazo]].forEach(function(f){h+='<div style="background:var(--surface);border-radius:8px;padding:7px 9px"><p style="color:var(--muted);font-size:9px">'+f[0]+'</p><p style="color:'+(f[0]==='CAT'?colorPorCAT(p.cat):'var(--text)')+';font-weight:700;font-size:12px">'+f[1]+'</p></div>';});
   h+='</div><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted);font-size:11px">Avance</span><span style="color:var(--accent);font-size:11px;font-weight:700">'+av.toFixed(0)+'%</span></div>'+bar(p.monto-p.saldo,p.monto,'var(--accent)')+'</div>';
   h+='<div class="fg" style="margin-top:10px">'+bdg('Próx: '+fmtD(p.proximoPago),'var(--amber)')+bdg('Inicio: '+fmtD(p.fechaInicio),'var(--accent)')+'</div>';
   h+='<div class="fg" style="margin-top:12px"><button class="btn bg bs" onclick="abrirDetallePrestamo('+p.id+')">Ver detalle</button><button class="btn bg bs" onclick="EP('+p.id+')">Editar</button><button class="btn bd bs" onclick="ELP('+p.id+')">Eliminar</button></div></div>';
