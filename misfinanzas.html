@@ -16,7 +16,7 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
   --bg:#0B1120;--surface:#131C2E;--card:#1A2540;--border:#243050;
-  --accent:#10B981;--blue:#3B82F6;--purple:#8B5CF6;--red:#EF4444;--amber:#F59E0B;--coral:#F97316;--teal:#84CC16;--pink:#EC4899;--slate:#475569;
+  --accent:#10B981;--blue:#3B82F6;--purple:#8B5CF6;--red:#EF4444;--amber:#F59E0B;--coral:#F97316;--teal:#84CC16;--pink:#EC4899;--slate:#475569;--cyan:#06B6D4;--gold:#EAB308;--indigo:#6366F1;
   --text:#F1F5F9;--muted:#64748B;--subtle:#94A3B8;
 }
 body.light{
@@ -1498,16 +1498,7 @@ function diasDelMesPorSemana(diasSemana,y,m){
   return out;
 }
 
-// Color por categoría para el Calendario (Servicios/Educación/Salud/Membresías/Préstamos).
-// Tarjetas y Préstamos como listas no pasan por aquí — tienen su color fijo abajo.
-function catColor(categoria,subcategoria){
-  if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return 'var(--blue)';
-  if(categoria==='Educación')return 'var(--purple)';
-  if(categoria==='Salud')return 'var(--teal)';
-  if(categoria==='Membresías')return 'var(--pink)';
-  if(categoria==='Intereses y comisiones')return subcategoria==='Anualidad Amex'?'var(--pink)':'var(--red)';
-  return 'var(--muted)';
-}
+// Color por categoría para el Calendario/Presupuesto (definición completa más abajo, junto a catIcon).
 var ICOSVG={
   llave:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.66 5.66l-6.36 6.35a1 1 0 0 0 0 1.42l1.3 1.3a1 1 0 0 0 1.42 0l6.35-6.36a4 4 0 0 0 5.66-5.66"/></svg>',
   tarjeta:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
@@ -1521,14 +1512,31 @@ var ICOSVG={
   subiendo:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>',
   billete:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 6v.01M18 18v.01"/></svg>',
   intercambio:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M3 7h18M7 21l-4-4 4-4M21 17H3"/></svg>',
-  reloj:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>'
+  reloj:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
+  auto:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-5A2 2 0 0 1 6.4 6.5h11.2a2 2 0 0 1 1.9 1.5L21 13"/><rect x="2" y="13" width="20" height="6" rx="1.5"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>',
+  tenedor:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v8M4 2v5a2 2 0 0 0 4 0V2M6 10v12M18 2c-2 2-2 5-2 8h4c0-3 0-6-2-8zM18 10v12"/></svg>',
+  nino:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>'
 };
+function catColor(categoria,subcategoria){
+  if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return 'var(--blue)';
+  if(categoria==='Educación')return 'var(--purple)';
+  if(categoria==='Salud')return 'var(--teal)';
+  if(categoria==='Membresías')return 'var(--pink)';
+  if(categoria==='Intereses y comisiones')return subcategoria==='Anualidad Amex'?'var(--pink)':'var(--red)';
+  if(categoria==='Transporte')return 'var(--cyan)';
+  if(categoria==='Alimentación')return 'var(--gold)';
+  if(categoria==='Niños')return 'var(--indigo)';
+  return 'var(--muted)';
+}
 function catIcon(categoria,subcategoria){
   if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return ICOSVG.llave;
   if(categoria==='Educación')return ICOSVG.gorro;
   if(categoria==='Salud')return ICOSVG.corazon;
   if(categoria==='Membresías')return ICOSVG.estrella;
   if(categoria==='Intereses y comisiones')return subcategoria==='Anualidad Amex'?ICOSVG.estrella:ICOSVG.bajando;
+  if(categoria==='Transporte')return ICOSVG.auto;
+  if(categoria==='Alimentación')return ICOSVG.tenedor;
+  if(categoria==='Niños')return ICOSVG.nino;
   return ICOSVG.pin;
 }
 function buildEvCal(){
@@ -2267,8 +2275,8 @@ function RPRES(){
           var color=pct>=100?'var(--red)':pct>=80?'#f59e0b':'var(--accent)';
           h+='<div class="card" style="margin-bottom:8px;padding:13px 14px">';
           h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-          h+='<div><div style="font-weight:700;font-size:14px;color:var(--text)">'+v.subcategoria+'</div>';
-          h+='<div style="color:var(--muted);font-size:11px">'+v.categoria+'  •  '+v.frecuencia+'</div></div>';
+          h+='<div style="display:flex;gap:11px;align-items:center"><span style="width:36px;height:36px;border-radius:10px;background:'+catColor(v.categoria,v.subcategoria)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+catIcon(v.categoria,v.subcategoria)+'</span><div><div style="font-weight:700;font-size:14px;color:var(--text)">'+v.subcategoria+'</div>';
+          h+='<div style="color:var(--muted);font-size:11px">'+v.categoria+'  •  '+v.frecuencia+'</div></div></div>';
           h+='<div style="text-align:right"><div style="font-size:13px;font-weight:700;color:'+color+'">'+fmt(gastado,'MXN')+'</div>';
           h+='<div style="color:var(--muted);font-size:11px">de '+fmt(lim,'MXN')+'</div></div></div>';
           h+='<div style="background:var(--surface);border-radius:6px;height:8px;overflow:hidden">';
