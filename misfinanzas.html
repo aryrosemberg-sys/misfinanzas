@@ -1030,6 +1030,7 @@ function fmtD(d){if(!d)return '';return parseD(d).toLocaleDateString('es-MX',{da
 function hoy(){return new Date().toISOString().slice(0,10);}
 function uid(){return Date.now()*1000+Math.floor(Math.random()*1000);}
 function bdg(t,c){return '<span class="badge" style="background:'+c+'22;color:'+c+'">'+t+'</span>';}
+function tituloIcon(ico,color,texto,margenArriba){return '<div style="display:flex;align-items:center;gap:8px;margin:'+(margenArriba||16)+'px 0 8px"><span style="width:24px;height:24px;border-radius:8px;background:'+color+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ico+'</span><h3 style="margin:0;font-size:14px;color:var(--muted)">'+texto+'</h3></div>';}
 function bar(v,mx,c){var p=mx>0?Math.min((v/mx)*100,100):0;var cl=p>80?'var(--red)':p>60?'var(--amber)':(c||'var(--accent)');return '<div class="bwrap"><div class="bfill" style="width:'+p+'%;background:'+cl+'"></div></div>';}
 function DR(k,v){return '<div class="dr"><span>'+k+'</span><span>'+v+'</span></div>';}
 
@@ -1539,7 +1540,10 @@ var ICOSVG={
   pata:'<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" stroke="none"><circle cx="7" cy="8" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="17" cy="8" r="2"/><path d="M12 11c-3 0-6 2.5-6 5.5A3.5 3.5 0 0 0 9.5 20c1 0 1.6-.6 2.5-.6s1.5.6 2.5.6a3.5 3.5 0 0 0 3.5-3.5C18 13.5 15 11 12 11z"/></svg>',
   maletin:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M2 12h20"/></svg>',
   recibo:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>',
-  play:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z" fill="#fff" stroke="none"/></svg>'
+  play:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z" fill="#fff" stroke="none"/></svg>',
+  campana:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  gota:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8 6 6 9 6 13a6 6 0 0 0 12 0c0-4-2-7-6-11z"/></svg>',
+  pulso:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>'
 };
 function catColor(categoria,subcategoria){
   if(categoria==='Hogar'||categoria==='Celular'||categoria==='Streaming')return 'var(--blue)';
@@ -2431,7 +2435,7 @@ function RMETA(){
 
   var avisosOrd=E.metas.avisos.slice().sort(function(a,b){return parseD(a.fecha)-parseD(b.fecha);});
   if(avisosOrd.length){
-    h+='<h3 style="margin:16px 0 8px;font-size:14px;color:var(--muted)">AVISOS ESPECIALES</h3>';
+    h+=tituloIcon(ICOSVG.campana,'var(--amber)','AVISOS ESPECIALES',16);
     avisosOrd.forEach(function(a){
       var d=parseD(a.fecha); var faltan=Math.ceil((d-hoyD)/86400000);
       var urgente=faltan<=14&&faltan>=0;
@@ -2446,14 +2450,14 @@ function RMETA(){
 
   var liq=sumaLiquidez(); var obj=E.metas.colchonObjetivo;
   var pctLiq=Math.min(100,Math.max(0,liq/obj*100));
-  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">COLCHÓN DE LIQUIDEZ</h3>';
+  h+=tituloIcon(ICOSVG.gota,'var(--blue)','COLCHÓN DE LIQUIDEZ',20);
   h+='<div class="card">';
   h+='<div style="display:flex;justify-content:space-between;align-items:baseline"><p style="font-weight:700">'+fmt(liq)+' <span style="color:var(--muted);font-weight:400;font-size:12px">de '+fmt(obj)+'</span></p><button onclick="setColchonObjetivo()" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer">Cambiar meta</button></div>';
   h+='<div style="background:var(--border);border-radius:8px;height:10px;margin-top:8px;overflow:hidden"><div style="background:'+(pctLiq>=100?'var(--accent)':'var(--blue)')+';height:100%;width:'+pctLiq+'%"></div></div>';
   h+='<p style="color:var(--muted);font-size:11px;margin-top:6px">'+pctLiq.toFixed(0)+'% de la meta</p>';
   h+='</div>';
 
-  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">TARJETAS OBJETIVO — LAS MÁS CARAS</h3>';
+  h+=tituloIcon(ICOSVG.tarjeta,'var(--red)','TARJETAS OBJETIVO — LAS MÁS CARAS',20);
   var totalBase=0,totalAhora=0;
   E.metas.tarjetasObjetivo.forEach(function(id){
     var t=E.tarjetas.find(function(x){return x.id===id;});
@@ -2462,8 +2466,7 @@ function RMETA(){
     totalBase+=base; totalAhora+=t.saldo;
     var avance=base>0?Math.min(100,Math.max(0,(base-t.saldo)/base*100)):0;
     var creció=t.saldo>base+0.01;
-    h+='<div class="card">';
-    h+='<div style="display:flex;justify-content:space-between"><p style="font-weight:700;font-size:14px">'+t.nombre+'</p><p style="font-weight:800;color:'+(creció?'var(--red)':'var(--accent)')+'">'+fmt(t.saldo)+'</p></div>';
+    h+='<div class="card"><div style="display:flex;align-items:center;gap:12px"><span style="width:36px;height:36px;border-radius:10px;background:'+marcaColor(t.nombre)+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,255,255,.15)">'+ICOSVG.tarjeta+'</span><div style="flex:1;display:flex;justify-content:space-between"><p style="font-weight:700;font-size:14px">'+t.nombre+'</p><p style="font-weight:800;color:'+(creció?'var(--red)':'var(--accent)')+'">'+fmt(t.saldo)+'</p></div></div>';
     h+='<div style="background:var(--border);border-radius:8px;height:8px;margin-top:8px;overflow:hidden"><div style="background:'+(creció?'var(--red)':'var(--accent)')+';height:100%;width:'+(creció?100:avance)+'%"></div></div>';
     h+='<p style="color:var(--muted);font-size:11px;margin-top:5px">'+(creció?'Subió desde el punto de partida ('+fmt(base)+')':avance.toFixed(0)+'% pagado desde '+fmt(base))+'</p>';
     h+='</div>';
@@ -2484,7 +2487,7 @@ function RMETA(){
     if(mv.tipo==='gasto')gastoAcum+=Math.abs(mv.monto); else ingresoAcum+=mv.monto;
   });
   var proyectado=diasTranscurridos>0?(gastoAcum/diasTranscurridos*diasTotales):0;
-  h+='<h3 style="margin:20px 0 8px;font-size:14px;color:var(--muted)">RITMO DE GASTO ESTE MES</h3>';
+  h+=tituloIcon(ICOSVG.pulso,'var(--purple)','RITMO DE GASTO ESTE MES',20);
   h+='<div class="card">';
   h+='<p style="font-size:12px;color:var(--muted)">Gastado hasta hoy (día '+diasTranscurridos+' de '+diasTotales+')</p>';
   h+='<p style="font-weight:800;font-size:18px">'+fmt(gastoAcum)+'</p>';
